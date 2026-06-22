@@ -1,10 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Vcs.Domain.Enums;
 
-namespace Vcs.Domain.Entities
+public enum ProjectRole
 {
-    internal class ProjectRole
-    {
-    }
+    Owner = 1,
+    Reader = 2,
+    Writer = 3
 }

@@ -1,10 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿namespace Vcs.Domain.Enums;
 
-namespace Vcs.Domain.Entities
+public enum ProjectVisibility
 {
-    internal class ProjectVisibility
-    {
-    }
+    Public = 1,
+    Private = 2
 }
