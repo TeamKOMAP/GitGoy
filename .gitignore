@@ -1,0 +1,32 @@
+
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.pdb
+*.log
+*.tmp
+*.pidb
+*.psess
+*.vsp
+*.vspx
+*.sap
+*.tmp
+*.pidb
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+## Ignore NuGet packages
+packages/
+*.nupkg
+
+## Ignore build output
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
