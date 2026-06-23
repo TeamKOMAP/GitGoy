@@ -51,6 +51,18 @@ public sealed class AppDbContext
             .HasIndex(x => new { x.ProjectId, x.UserId })
             .IsUnique();
 
+        builder.Entity<ProjectMember>()
+            .HasOne(x => x.Project)
+            .WithMany(x => x.Members)
+            .HasForeignKey(x => x.ProjectId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        builder.Entity<ProjectMember>()
+            .HasOne(x => x.User)
+            .WithMany(x => x.ProjectMemberships)
+            .HasForeignKey(x => x.UserId)
+            .OnDelete(DeleteBehavior.NoAction);
+
         // Уникальность RefreshToken (по хэшу)
         builder.Entity<RefreshToken>()
             .HasIndex(x => x.TokenHash)
