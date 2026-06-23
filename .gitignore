@@ -1,0 +1,8 @@
+.dotnet/
+.templateengine/
+bin/
+obj/
+**/bin/
+**/obj/
+tmp/
+.agents/
