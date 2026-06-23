@@ -6,3 +6,4 @@ obj/
 **/obj/
 tmp/
 .agents/
+tmp-build/
