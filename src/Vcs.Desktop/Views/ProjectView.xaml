@@ -123,6 +123,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type TextBox}">
                         <Border Background="{TemplateBinding Background}"
+                                CornerRadius="24"
                                 Padding="0">
                             <Grid>
                                 <TextBlock x:Name="Watermark"
@@ -329,7 +330,7 @@
 
             <TextBox Grid.Column="0"
                      Grid.ColumnSpan="3"
-                     Margin="0,8,0,8"
+                     Margin="8,8,8,8"
                      Tag="Поиск..."
                      Style="{StaticResource SearchTextBoxStyle}" />
         </Grid>
