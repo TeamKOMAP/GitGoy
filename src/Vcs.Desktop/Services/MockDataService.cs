@@ -1,9 +1,8 @@
 using Vcs.Desktop.Models;
-using System.IO;
 
 namespace Vcs.Desktop.Services;
 
-public sealed class MockDataService : IMockDataService
+public sealed class MockDataService : IRepositoryDataService
 {
     public MockDataService()
     {
@@ -28,18 +27,11 @@ public sealed class MockDataService : IMockDataService
         };
 
         project.Commits.Insert(0, commit);
-        project.UpdatedAt = DateTime.Now;
         return commit;
     }
 
     public void Push(ProjectModel project, BranchModel branch)
     {
-        project.UpdatedAt = DateTime.Now;
-    }
-
-    public string Clone(ProjectModel project, string targetPath)
-    {
-        return Path.Combine(targetPath, project.Name);
     }
 
     private static UserModel CreateCurrentUser()
@@ -48,20 +40,8 @@ public sealed class MockDataService : IMockDataService
         {
             UserName = "offlayt",
             DisplayName = "0_offlayt",
-            Bio = "Version control client prototype",
-            AvatarInitials = "OF",
-            FollowersCount = 28,
-            FollowingCount = 12
+            Bio = "Version control client prototype"
         };
-
-        foreach (var day in Enumerable.Range(0, 91).Select(i => DateTime.Today.AddDays(-90 + i)))
-        {
-            user.Contributions.Add(new ContributionDayModel
-            {
-                Date = day,
-                CommitCount = Math.Abs((day.Day * 7 + day.Month * 3) % 9 - 3)
-            });
-        }
 
         user.Projects.Add(CreateProject("vcs-desktop", "Desktop client for a lightweight Git hosting system.", true, ProjectVisibility.Private));
         user.Projects.Add(CreateProject("git-api-contracts", "DTO sketches and API contracts for repository operations.", true, ProjectVisibility.Public));
@@ -83,9 +63,7 @@ public sealed class MockDataService : IMockDataService
             Description = description,
             OwnerName = owner,
             Visibility = visibility,
-            RepositoryPath = $@"C:\Repos\{name}",
-            IsOwnedByCurrentUser = owned,
-            UpdatedAt = DateTime.Now.AddHours(-name.Length)
+            IsOwnedByCurrentUser = owned
         };
 
         project.Branches.Add(new BranchModel { Name = "main", IsDefault = true });

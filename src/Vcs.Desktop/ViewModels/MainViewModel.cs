@@ -8,14 +8,13 @@ namespace Vcs.Desktop.ViewModels;
 public sealed class MainViewModel : ObservableObject
 {
     private const double SidebarDragThreshold = 28;
-    private readonly IMockDataService _dataService;
+    private readonly IRepositoryDataService _dataService;
     private readonly Action _exit;
     private object _currentViewModel;
-    private string _activeSection = "Project";
     private bool _isSidebarExpanded;
     private double _sidebarDragOffset;
 
-    public MainViewModel(IMockDataService dataService, Action exit)
+    public MainViewModel(IRepositoryDataService dataService, Action exit)
     {
         _dataService = dataService;
         _exit = exit;
@@ -23,9 +22,8 @@ public sealed class MainViewModel : ObservableObject
         Project = new ProjectViewModel(dataService.CurrentProject, dataService);
         _currentViewModel = Project;
 
-        ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
-        ShowProfileCommand = new RelayCommand(() => Navigate("Profile", Profile));
-        ShowProjectCommand = new RelayCommand(() => Navigate("Project", Project));
+        ShowProfileCommand = new RelayCommand(() => Navigate(Profile));
+        ShowProjectCommand = new RelayCommand(() => Navigate(Project));
         ExitCommand = new RelayCommand(_exit);
     }
 
@@ -38,12 +36,6 @@ public sealed class MainViewModel : ObservableObject
         private set => SetProperty(ref _currentViewModel, value);
     }
 
-    public string ActiveSection
-    {
-        get => _activeSection;
-        private set => SetProperty(ref _activeSection, value);
-    }
-
     public bool IsSidebarExpanded
     {
         get => _isSidebarExpanded;
@@ -53,16 +45,13 @@ public sealed class MainViewModel : ObservableObject
             {
                 OnPropertyChanged(nameof(SidebarWidth));
                 OnPropertyChanged(nameof(SidebarLabelVisibility));
-                OnPropertyChanged(nameof(SidebarToggleText));
             }
         }
     }
 
     public double SidebarWidth => IsSidebarExpanded ? 236 : 72;
     public string SidebarLabelVisibility => IsSidebarExpanded ? "Visible" : "Collapsed";
-    public string SidebarToggleText => IsSidebarExpanded ? "\uE76B" : "\uE76C";
 
-    public ICommand ToggleSidebarCommand { get; }
     public ICommand ShowProfileCommand { get; }
     public ICommand ShowProjectCommand { get; }
     public ICommand ExitCommand { get; }
@@ -88,14 +77,8 @@ public sealed class MainViewModel : ObservableObject
         _sidebarDragOffset = 0;
     }
 
-    private void ToggleSidebar()
+    private void Navigate(object viewModel)
     {
-        IsSidebarExpanded = !IsSidebarExpanded;
-    }
-
-    private void Navigate(string section, object viewModel)
-    {
-        ActiveSection = section;
         CurrentViewModel = viewModel;
     }
 
@@ -103,6 +86,6 @@ public sealed class MainViewModel : ObservableObject
     {
         Project = new ProjectViewModel(project, _dataService);
         OnPropertyChanged(nameof(Project));
-        Navigate("Project", Project);
+        Navigate(Project);
     }
 }

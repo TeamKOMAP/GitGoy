@@ -24,7 +24,5 @@ public sealed class ProfileViewModel
 
     public UserModel User { get; }
     public ObservableCollection<ProjectModel> Projects => User.Projects;
-    public ObservableCollection<ContributionDayModel> Contributions => User.Contributions;
-    public int TotalCommits => Contributions.Sum(x => x.CommitCount);
     public ICommand OpenProjectCommand { get; }
 }
