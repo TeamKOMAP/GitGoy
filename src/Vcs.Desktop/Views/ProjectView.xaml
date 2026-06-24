@@ -1,0 +1,577 @@
+<UserControl x:Class="Vcs.Desktop.Views.ProjectView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="DarkTextBoxStyle"
+               TargetType="{x:Type TextBox}">
+            <Setter Property="Background" Value="#000000" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CaretBrush" Value="#FFFFFF" />
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type TextBox}">
+                        <Border Background="{TemplateBinding Background}"
+                                CornerRadius="12"
+                                Padding="0">
+                            <Grid>
+                                <TextBlock x:Name="Watermark"
+                                           Text="{TemplateBinding Tag}"
+                                           Margin="{TemplateBinding Padding}"
+                                           Foreground="#858899"
+                                           FontSize="{TemplateBinding FontSize}"
+                                           LineHeight="{TemplateBinding FontSize}"
+                                           VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                           IsHitTestVisible="False"
+                                           Visibility="Collapsed" />
+                                <ScrollViewer x:Name="PART_ContentHost"
+                                              Margin="{TemplateBinding Padding}"
+                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter TargetName="Watermark"
+                                        Property="Visibility"
+                                        Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                <Setter TargetName="Watermark"
+                                        Property="Visibility"
+                                        Value="Collapsed" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="GreenCheckBoxStyle"
+               TargetType="{x:Type CheckBox}">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type CheckBox}">
+                        <Border x:Name="Box"
+                                Width="{TemplateBinding Width}"
+                                Height="{TemplateBinding Height}"
+                                Background="#101018"
+                                BorderBrush="#35AA4E"
+                                BorderThickness="1"
+                                CornerRadius="3">
+                            <TextBlock x:Name="Mark"
+                                       Text="&#xE73E;"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="17"
+                                       Foreground="#FFFFFF"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Box"
+                                        Property="Background"
+                                        Value="#35AA4E" />
+                                <Setter TargetName="Mark"
+                                        Property="Visibility"
+                                        Value="Visible" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Box"
+                                        Property="BorderBrush"
+                                        Value="#63D27A" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBoxItemStyle"
+               TargetType="{x:Type ComboBoxItem}">
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#000000" />
+            <Setter Property="Padding" Value="10,8" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                        <Border x:Name="ItemBorder"
+                                Background="{TemplateBinding Background}"
+                                CornerRadius="8"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder"
+                                        Property="Background"
+                                        Value="#111118" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder"
+                                        Property="Background"
+                                        Value="#181824" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkComboBoxStyle"
+               TargetType="{x:Type ComboBox}">
+            <Setter Property="Height" Value="58" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#000000" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DarkComboBoxItemStyle}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ComboBox}">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Focusable="False"
+                                          BorderThickness="0"
+                                          Background="#000000"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                                        <Border x:Name="ToggleBorder"
+                                                Background="{TemplateBinding Background}"
+                                                CornerRadius="0">
+                                            <Grid Margin="12,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0"
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType={x:Type ComboBox}}}"
+                                                                  VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1"
+                                                           Text="&#xE70D;"
+                                                           FontFamily="Segoe MDL2 Assets"
+                                                           FontSize="15"
+                                                           Foreground="#FFFFFF"
+                                                           Margin="8,0,0,0"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="ToggleBorder"
+                                                        Property="Background"
+                                                        Value="#111118" />
+                                            </Trigger>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="ToggleBorder"
+                                                        Property="Background"
+                                                        Value="#111118" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+
+                            <Popup x:Name="PART_Popup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Fade">
+                                <Border Background="#000000"
+                                        Padding="6"
+                                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                                    <ScrollViewer MaxHeight="260"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  HorizontalScrollBarVisibility="Disabled">
+                                        <ItemsPresenter />
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="{StaticResource PageBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="74" />
+            <RowDefinition Height="4" />
+            <RowDefinition Height="58" />
+            <RowDefinition Height="4" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="35*" MinWidth="288" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="65*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <TextBox Grid.Column="0"
+                     Grid.ColumnSpan="3"
+                     Margin="8,8,8,8"
+                     Tag="Поиск..."
+                     Style="{StaticResource SearchTextBoxStyle}" />
+        </Grid>
+
+        <Border Grid.Row="1"
+                Background="#000000" />
+
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="35*" MinWidth="288" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="65*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <ComboBox Grid.Column="0"
+                      ItemsSource="{Binding Repositories}"
+                      SelectedItem="{Binding SelectedProject}"
+                      Style="{StaticResource DarkComboBoxStyle}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <DockPanel LastChildFill="True">
+                            <TextBlock Text="&#xE8B7;"
+                                       Width="34"
+                                       FontFamily="Segoe MDL2 Assets"
+                                       FontSize="22"
+                                       Foreground="#FFFFFF"
+                                       VerticalAlignment="Center" />
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="текущий репозиторий"
+                                           Foreground="#D6D6DF"
+                                           FontSize="11" />
+                                <TextBlock Text="{Binding Name}"
+                                           Foreground="#FFFFFF"
+                                           FontSize="15"
+                                           TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DockPanel>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <Border Grid.Column="1"
+                    Background="#000000" />
+
+            <Grid Grid.Column="2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="4" />
+                    <ColumnDefinition Width="1.7*" />
+                </Grid.ColumnDefinitions>
+
+                <ComboBox Grid.Column="0"
+                          ItemsSource="{Binding Branches}"
+                          SelectedItem="{Binding SelectedBranch}"
+                          Style="{StaticResource DarkComboBoxStyle}">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel LastChildFill="True">
+                                <TextBlock Text="&#xE8AB;"
+                                           Width="34"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="21"
+                                           Foreground="#FFFFFF"
+                                           VerticalAlignment="Center" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="текущая ветка"
+                                               Foreground="#D6D6DF"
+                                               FontSize="11" />
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#FFFFFF"
+                                               FontSize="15"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+
+                <Border Grid.Column="1"
+                        Background="#000000" />
+
+                <Button Grid.Column="2"
+                        Style="{StaticResource SquareBlackButtonStyle}"
+                        Height="58"
+                        HorizontalContentAlignment="Left"
+                        Command="{Binding PushCommand}">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock Text="&#xE895;"
+                                   Width="38"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="22"
+                                   Foreground="#FFFFFF"
+                                   VerticalAlignment="Center" />
+                        <TextBlock Text="Пуш в ветку"
+                                   FontSize="22"
+                                   Foreground="#FFFFFF"
+                                   VerticalAlignment="Center" />
+                    </DockPanel>
+                </Button>
+            </Grid>
+
+        </Grid>
+
+        <Border Grid.Row="3"
+                Background="#000000" />
+
+        <Grid Grid.Row="4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="35*" MinWidth="288" />
+                <ColumnDefinition Width="4" />
+                <ColumnDefinition Width="65*" MinWidth="360" />
+            </Grid.ColumnDefinitions>
+
+            <Grid x:Name="LeftWorkspaceGrid"
+                  Grid.Column="0"
+                  Loaded="LeftWorkspaceGrid_SizeChanged"
+                  SizeChanged="LeftWorkspaceGrid_SizeChanged">
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="ChangesRow" Height="208" MinHeight="96" />
+                    <RowDefinition Height="6" />
+                    <RowDefinition x:Name="CommitEditorRow" Height="*" MinHeight="124" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0"
+                      Background="{StaticResource PageBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="40" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <DockPanel Grid.Row="0"
+                               LastChildFill="True"
+                               Margin="12,0">
+                        <Border DockPanel.Dock="Right"
+                                Width="20"
+                                Height="20"
+                                CornerRadius="10"
+                                Background="#000000"
+                                VerticalAlignment="Center">
+                            <TextBlock Text="{Binding ChangedFilesCount}"
+                                       Foreground="#FFFFFF"
+                                       FontSize="11"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Border>
+                        <CheckBox IsChecked="{Binding AreAllChangedFilesIncluded, Mode=TwoWay}"
+                                  Style="{StaticResource GreenCheckBoxStyle}"
+                                  DockPanel.Dock="Left"
+                                  Margin="0,0,12,0"
+                                  VerticalAlignment="Center" />
+                        <TextBlock Text="Изменения"
+                                   Foreground="#FFFFFF"
+                                   FontSize="17"
+                                   VerticalAlignment="Center"
+                                   HorizontalAlignment="Left" />
+                    </DockPanel>
+
+                    <ScrollViewer Grid.Row="1"
+                                  VerticalScrollBarVisibility="Hidden"
+                                  HorizontalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding ChangedFiles}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Height="42"
+                                            BorderBrush="#000000"
+                                            BorderThickness="0,4,0,0"
+                                            Background="{StaticResource PageBrush}">
+                                        <DockPanel LastChildFill="True"
+                                                   Margin="12,0">
+                                            <CheckBox IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                                                      Style="{StaticResource GreenCheckBoxStyle}"
+                                                      DockPanel.Dock="Left"
+                                                      VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding Path}"
+                                                       Margin="12,0,0,0"
+                                                       Foreground="#FFFFFF"
+                                                       FontSize="13"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       VerticalAlignment="Center" />
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Grid>
+
+                <GridSplitter Grid.Row="1"
+                              Height="6"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Background="#000000"
+                              ResizeBehavior="PreviousAndNext"
+                              ResizeDirection="Rows"
+                              DragDelta="CommitSplitter_DragDelta"
+                              ShowsPreview="False" />
+
+                <Grid Grid.Row="2"
+                      Background="{StaticResource PageBrush}">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="50" />
+                        <RowDefinition Height="*" MinHeight="0" />
+                        <RowDefinition Height="56" />
+                    </Grid.RowDefinitions>
+
+                    <TextBox Grid.Row="0"
+                             Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
+                             Tag="Название коммита"
+                             Style="{StaticResource DarkTextBoxStyle}"
+                             Margin="12,7,14,6" />
+
+                    <TextBox Grid.Row="1"
+                             Text="{Binding CommitDescription, UpdateSourceTrigger=PropertyChanged}"
+                             Tag="Описание коммита"
+                             Style="{StaticResource DarkTextBoxStyle}"
+                             Margin="12,4,14,8"
+                             TextWrapping="Wrap"
+                             AcceptsReturn="True"
+                             VerticalContentAlignment="Top" />
+
+                    <Button Grid.Row="2"
+                            Content="{Binding SelectedBranch.Name, StringFormat=Коммит в {0}}"
+                            Style="{StaticResource RoundBlackButtonStyle}"
+                            Margin="12,6,14,8"
+                            Command="{Binding CommitCommand}" />
+                </Grid>
+            </Grid>
+
+            <Border Grid.Column="1"
+                    Background="#000000" />
+
+            <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="4" />
+                    <RowDefinition Height="58" />
+                </Grid.RowDefinitions>
+
+                <ListBox x:Name="CommitsList"
+                         Grid.Row="0"
+                         ItemsSource="{Binding Commits}"
+                         SelectedItem="{Binding SelectedCommit}"
+                         Background="{StaticResource PageBrush}"
+                         BorderThickness="0"
+                         PreviewMouseWheel="CommitsList_PreviewMouseWheel"
+                         ScrollViewer.HorizontalScrollBarVisibility="Hidden"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="False"
+                         ScrollViewer.PanningMode="HorizontalOnly">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="{x:Type ListBoxItem}">
+                            <Setter Property="Margin" Value="12,16,16,16" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Background" Value="Transparent" />
+                            <Setter Property="BorderThickness" Value="0" />
+                            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="{x:Type ListBoxItem}">
+                                        <ContentPresenter />
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Width="300">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="44" />
+                                    <RowDefinition Height="10" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0"
+                                        Background="#000000"
+                                        CornerRadius="12">
+                                    <TextBlock Text="{Binding Message}"
+                                               Foreground="#FFFFFF"
+                                               FontSize="16"
+                                               TextAlignment="Center"
+                                               TextTrimming="CharacterEllipsis"
+                                               VerticalAlignment="Center"
+                                               Margin="12,0" />
+                                </Border>
+
+                                <Border Grid.Row="2"
+                                        Background="#000000"
+                                        CornerRadius="12"
+                                        Padding="14,16">
+                                    <StackPanel>
+                                        <ItemsControl ItemsSource="{Binding DataContext.Files, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <DockPanel Margin="0,0,0,10">
+                                                        <TextBlock Text="&#xE8A5;"
+                                                                   Width="18"
+                                                                   FontFamily="Segoe MDL2 Assets"
+                                                                   FontSize="15"
+                                                                   Foreground="#FFFFFF"
+                                                                   DockPanel.Dock="Left"
+                                                                   TextAlignment="Center"
+                                                                   VerticalAlignment="Center" />
+                                                        <TextBlock Text="{Binding}"
+                                                                   Margin="10,0,0,0"
+                                                                   Foreground="#FFFFFF"
+                                                                   FontSize="12"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   VerticalAlignment="Center" />
+                                                    </DockPanel>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <TextBlock Margin="0,8,0,0"
+                                                   Foreground="#C9CBD8"
+                                                   FontSize="12"
+                                                   TextWrapping="Wrap">
+                                            <Run Text="{Binding AuthorName}" />
+                                            <Run Text=" / " />
+                                            <Run Text="{Binding Sha}" />
+                                            <Run Text=" / " />
+                                            <Run Text="{Binding CreatedAt, StringFormat={}{0:dd.MM HH:mm}}" />
+                                        </TextBlock>
+                                        <TextBlock Text="{Binding ChangedFiles, StringFormat={}{0} изменённых файлов}"
+                                                   Margin="0,5,0,0"
+                                                   Foreground="#C9CBD8"
+                                                   FontSize="12" />
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <Border Grid.Row="1"
+                        Background="#000000" />
+
+                <Button Grid.Row="2"
+                        Content="{Binding VisibilityToggleText}"
+                        Style="{StaticResource RoundBlackButtonStyle}"
+                        Margin="12,7,12,7"
+                        Command="{Binding ToggleVisibilityCommand}" />
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
