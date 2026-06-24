@@ -9,6 +9,7 @@ namespace Vcs.Desktop.ViewModels;
 public sealed class ProjectViewModel : ObservableObject
 {
     private readonly IRepositoryDataService _dataService;
+    private bool _isUpdatingAllChangedFiles;
     private ProjectModel _selectedProject;
     private BranchModel _selectedBranch;
     private CommitModel? _selectedCommit;
@@ -90,6 +91,28 @@ public sealed class ProjectViewModel : ObservableObject
     }
 
     public bool CanWrite => Project.IsOwnedByCurrentUser;
+    public bool AreAllChangedFilesIncluded
+    {
+        get => ChangedFiles.All(file => file.IsIncluded);
+        set
+        {
+            if (_isUpdatingAllChangedFiles)
+            {
+                return;
+            }
+
+            _isUpdatingAllChangedFiles = true;
+            foreach (var file in ChangedFiles)
+            {
+                file.IsIncluded = value;
+            }
+            _isUpdatingAllChangedFiles = false;
+
+            OnPropertyChanged();
+            RaiseCommandStates();
+        }
+    }
+
     public string VisibilityToggleText => Project.Visibility == ProjectVisibility.Public
         ? "Сейчас это публичный репозиторий"
         : "Сейчас это приватный репозиторий";
@@ -140,6 +163,7 @@ public sealed class ProjectViewModel : ObservableObject
             {
                 if (args.PropertyName == nameof(FileChangeViewModel.IsIncluded))
                 {
+                    OnPropertyChanged(nameof(AreAllChangedFilesIncluded));
                     RaiseCommandStates();
                 }
             };

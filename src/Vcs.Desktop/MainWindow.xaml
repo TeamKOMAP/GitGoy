@@ -10,7 +10,9 @@
         MinHeight="640"
         Width="1180"
         MinWidth="980"
-        Background="{StaticResource PageBrush}">
+        Background="{StaticResource PageBrush}"
+        Focusable="True"
+        PreviewMouseDown="Window_PreviewMouseDown">
     <Window.Resources>
         <Style x:Key="SidebarNavButtonStyle"
                TargetType="{x:Type Button}">

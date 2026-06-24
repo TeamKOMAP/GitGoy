@@ -1,5 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media.Animation;
 using Vcs.Desktop.Services;
 using Vcs.Desktop.ViewModels;
@@ -40,6 +42,18 @@ public partial class MainWindow : Window
         }
     }
 
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is not TextBox focusedTextBox
+            || IsMouseInside(focusedTextBox, e))
+        {
+            return;
+        }
+
+        Keyboard.ClearFocus();
+        Focus();
+    }
+
     private void AnimateSidebarWidth(double targetWidth)
     {
         var animation = new DoubleAnimation
@@ -50,5 +64,14 @@ public partial class MainWindow : Window
         };
 
         SidebarBorder.BeginAnimation(WidthProperty, animation);
+    }
+
+    private static bool IsMouseInside(FrameworkElement element, MouseButtonEventArgs e)
+    {
+        var position = e.GetPosition(element);
+        return position.X >= 0
+            && position.Y >= 0
+            && position.X <= element.ActualWidth
+            && position.Y <= element.ActualHeight;
     }
 }
