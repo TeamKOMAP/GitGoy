@@ -1,0 +1,78 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media.Animation;
+using Vcs.Desktop.Services;
+using Vcs.Desktop.ViewModels;
+
+namespace Vcs.Desktop;
+
+public partial class MainWindow : Window
+{
+    public MainWindow()
+    {
+        InitializeComponent();
+        var viewModel = new MainViewModel(Close);
+        viewModel.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(MainViewModel.SidebarWidth))
+            {
+                AnimateSidebarWidth(viewModel.SidebarWidth);
+            }
+        };
+
+        DataContext = viewModel;
+        SidebarBorder.Width = viewModel.SidebarWidth;
+    }
+
+    private void SidebarEdge_DragDelta(object sender, DragDeltaEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.DragSidebar(e.HorizontalChange);
+        }
+    }
+
+    private void SidebarEdge_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (DataContext is MainViewModel viewModel)
+        {
+            viewModel.ResetSidebarDrag();
+        }
+    }
+
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is not FrameworkElement focusedElement
+            || focusedElement is not TextBox and not PasswordBox
+            || IsMouseInside(focusedElement, e))
+        {
+            return;
+        }
+
+        Keyboard.ClearFocus();
+        Focus();
+    }
+
+    private void AnimateSidebarWidth(double targetWidth)
+    {
+        var animation = new DoubleAnimation
+        {
+            To = targetWidth,
+            Duration = TimeSpan.FromMilliseconds(180),
+            EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
+        };
+
+        SidebarBorder.BeginAnimation(WidthProperty, animation);
+    }
+
+    private static bool IsMouseInside(FrameworkElement element, MouseButtonEventArgs e)
+    {
+        var position = e.GetPosition(element);
+        return position.X >= 0
+            && position.Y >= 0
+            && position.X <= element.ActualWidth
+            && position.Y <= element.ActualHeight;
+    }
+}

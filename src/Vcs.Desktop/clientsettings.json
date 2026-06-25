@@ -1,0 +1,7 @@
+{
+  "Api": {
+    "BaseUrl": "http://localhost:5221",
+    "Username": "desktop-client",
+    "Password": "Password123!"
+  }
+}
