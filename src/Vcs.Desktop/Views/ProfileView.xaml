@@ -40,6 +40,7 @@
 
         <TextBox Grid.Row="0"
                  Margin="8,8,8,8"
+                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
                  Tag="Поиск..."
                  Style="{StaticResource SearchTextBoxStyle}" />
 

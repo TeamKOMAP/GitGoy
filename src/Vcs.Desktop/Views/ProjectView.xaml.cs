@@ -27,6 +27,17 @@ public partial class ProjectView : UserControl
         e.Handled = true;
     }
 
+    private void EditNamesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (EditNamesButton.ContextMenu is null)
+        {
+            return;
+        }
+
+        EditNamesButton.ContextMenu.PlacementTarget = EditNamesButton;
+        EditNamesButton.ContextMenu.IsOpen = true;
+    }
+
     private void CommitSplitter_DragDelta(object sender, DragDeltaEventArgs e)
     {
         UpdateResizeBounds();

@@ -56,11 +56,10 @@
                     <ControlTemplate TargetType="{x:Type TextBox}">
                         <Border Background="{TemplateBinding Background}"
                                 CornerRadius="24"
-                                Padding="0">
+                                Padding="{TemplateBinding Padding}">
                             <Grid>
                                 <TextBlock x:Name="Watermark"
                                            Text="{TemplateBinding Tag}"
-                                           Margin="{TemplateBinding Padding}"
                                            Foreground="#FFFFFF"
                                            FontSize="{TemplateBinding FontSize}"
                                            LineHeight="{TemplateBinding FontSize}"
@@ -68,7 +67,6 @@
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed" />
                                 <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="{TemplateBinding Padding}"
                                               VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
                             </Grid>
                         </Border>

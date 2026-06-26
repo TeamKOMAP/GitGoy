@@ -20,4 +20,5 @@ public sealed class ProjectModel
     public ObservableCollection<BranchModel> Branches { get; } = [];
     public ObservableCollection<CommitModel> Commits { get; } = [];
     public ObservableCollection<string> Files { get; } = [];
+    public ObservableCollection<string> ChangedFiles { get; } = [];
 }

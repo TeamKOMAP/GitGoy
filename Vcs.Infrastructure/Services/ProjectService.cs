@@ -151,9 +151,14 @@ public class ProjectService
         var project = await _db.Projects.FindAsync(projectId);
         if (project == null) throw new KeyNotFoundException("Project not found");
         if (project.OwnerId != userId) throw new UnauthorizedAccessException("Only owner can delete project");
-        _git.DeleteRepository(project.Id);
+        var members = await _db.ProjectMembers
+            .Where(member => member.ProjectId == projectId)
+            .ToListAsync();
+
+        _db.ProjectMembers.RemoveRange(members);
         _db.Projects.Remove(project);
         await _db.SaveChangesAsync();
+        _git.DeleteRepository(project.Id);
     }
 
     public async Task AddMemberAsync(Guid projectId, Guid userId, AddMemberReq dto)

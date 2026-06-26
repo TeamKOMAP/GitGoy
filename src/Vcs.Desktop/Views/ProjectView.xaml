@@ -9,18 +9,18 @@
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="CaretBrush" Value="#FFFFFF" />
             <Setter Property="FontSize" Value="16" />
-            <Setter Property="Padding" Value="16,8" />
+            <Setter Property="Padding" Value="16,6" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="{x:Type TextBox}">
                         <Border Background="{TemplateBinding Background}"
                                 CornerRadius="12"
-                                Padding="0">
+                                Padding="{TemplateBinding Padding}"
+                                SnapsToDevicePixels="True">
                             <Grid>
                                 <TextBlock x:Name="Watermark"
                                            Text="{TemplateBinding Tag}"
-                                           Margin="{TemplateBinding Padding}"
                                            Foreground="#858899"
                                            FontSize="{TemplateBinding FontSize}"
                                            LineHeight="{TemplateBinding FontSize}"
@@ -28,8 +28,10 @@
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed" />
                                 <ScrollViewer x:Name="PART_ContentHost"
-                                              Margin="{TemplateBinding Padding}"
-                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                              Focusable="False"
+                                              Background="Transparent"
+                                              HorizontalScrollBarVisibility="Hidden"
+                                              VerticalScrollBarVisibility="Hidden" />
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -223,6 +225,7 @@
             <TextBox Grid.Column="0"
                      Grid.ColumnSpan="3"
                      Margin="8,8,8,8"
+                     Text="{Binding CommitSearchText, UpdateSourceTrigger=PropertyChanged}"
                      Tag="Поиск..."
                      Style="{StaticResource SearchTextBoxStyle}" />
         </Grid>
@@ -269,7 +272,7 @@
 
             <Grid Grid.Column="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="1*" />
+                    <ColumnDefinition Width="1.2*" />
                     <ColumnDefinition Width="4" />
                     <ColumnDefinition Width="58" />
                     <ColumnDefinition Width="4" />
@@ -279,7 +282,7 @@
                 </Grid.ColumnDefinitions>
 
                 <ComboBox Grid.Column="0"
-                          ItemsSource="{Binding Branches}"
+                          ItemsSource="{Binding BranchMenuItems}"
                           SelectedItem="{Binding SelectedBranch}"
                           Style="{StaticResource DarkComboBoxStyle}">
                     <ComboBox.ItemTemplate>
@@ -308,7 +311,103 @@
                 <Border Grid.Column="1"
                         Background="#000000" />
 
-                <Button Grid.Column="2"
+                <Button x:Name="EditNamesButton"
+                        Grid.Column="2"
+                        Style="{StaticResource SquareBlackButtonStyle}"
+                        Height="58"
+                        Padding="0"
+                        ToolTip="РЎРѕР·РґР°С‚СЊ РІРµС‚РєСѓ"
+                        Click="EditNamesButton_Click">
+                    <Button.ContextMenu>
+                        <ContextMenu Background="#000000"
+                                     BorderBrush="#000000"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     HasDropShadow="False"
+                                     DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                            <ContextMenu.Template>
+                                <ControlTemplate TargetType="{x:Type ContextMenu}">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"
+                                            Padding="{TemplateBinding Padding}">
+                                        <ItemsPresenter />
+                                    </Border>
+                                </ControlTemplate>
+                            </ContextMenu.Template>
+                            <ContextMenu.ItemContainerStyle>
+                                <Style TargetType="{x:Type MenuItem}">
+                                    <Setter Property="Background" Value="#000000" />
+                                    <Setter Property="BorderThickness" Value="0" />
+                                    <Setter Property="Padding" Value="0" />
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="{x:Type MenuItem}">
+                                                <ContentPresenter ContentSource="Header" />
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ContextMenu.ItemContainerStyle>
+                            <Border Background="#000000"
+                                    Padding="12"
+                                    Width="280">
+                                <StackPanel>
+                                    <TextBlock Text="Repository name"
+                                               Foreground="#D6D6DF"
+                                               FontSize="12"
+                                               Margin="0,0,0,6" />
+                                    <TextBox Text="{Binding EditableRepositoryName, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource DarkTextBoxStyle}"
+                                             Height="42"
+                                             FontSize="14"
+                                             Padding="12,6" />
+                                    <Button Content="Save repository"
+                                            Style="{StaticResource RoundBlackButtonStyle}"
+                                            Margin="0,8,0,14"
+                                            Command="{Binding SaveRepositoryNameCommand}" />
+                                    <TextBlock Text="Branch name"
+                                               Foreground="#D6D6DF"
+                                               FontSize="12"
+                                               Margin="0,0,0,6" />
+                                    <TextBox Text="{Binding EditableBranchName, UpdateSourceTrigger=PropertyChanged}"
+                                             Style="{StaticResource DarkTextBoxStyle}"
+                                             Height="42"
+                                             FontSize="14"
+                                             Padding="12,6" />
+                                    <Button Content="Save branch"
+                                            Style="{StaticResource RoundBlackButtonStyle}"
+                                            Margin="0,8,0,0"
+                                            Command="{Binding SaveBranchNameCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                    <TextBlock Text="&#xE713;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="22"
+                               Foreground="#FFFFFF"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Button>
+
+                <Border Grid.Column="3"
+                        Background="#000000" />
+
+                <TextBox Grid.Column="2"
+                         Visibility="Collapsed"
+                         Height="58"
+                         Padding="12,8"
+                         FontSize="14"
+                         Text=""
+                         Tag="РќРѕРІР°СЏ РІРµС‚РєР°"
+                         Style="{StaticResource DarkTextBoxStyle}" />
+
+                <Border Grid.Column="5"
+                        Background="#000000" />
+
+                <Button Grid.Column="6"
+                        Visibility="Collapsed"
                         Style="{StaticResource SquareBlackButtonStyle}"
                         Height="58"
                         Padding="0"
@@ -322,7 +421,8 @@
                                VerticalAlignment="Center" />
                 </Button>
 
-                <Border Grid.Column="3"
+                <Border Grid.Column="5"
+                        Visibility="Collapsed"
                         Background="#000000" />
 
                 <Button Grid.Column="4"
@@ -345,6 +445,7 @@
                 </Button>
 
                 <Border Grid.Column="5"
+                        Visibility="Collapsed"
                         Background="#000000" />
 
                 <Button Grid.Column="6"
@@ -461,7 +562,7 @@
                 <Grid Grid.Row="2"
                       Background="{StaticResource PageBrush}">
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="50" />
+                        <RowDefinition Height="66" />
                         <RowDefinition Height="*" MinHeight="0" />
                         <RowDefinition Height="56" />
                     </Grid.RowDefinitions>
@@ -470,7 +571,8 @@
                              Text="{Binding CommitMessage, UpdateSourceTrigger=PropertyChanged}"
                              Tag="Название коммита"
                              Style="{StaticResource DarkTextBoxStyle}"
-                             Margin="12,7,14,6" />
+                             Height="54"
+                             Margin="12,6,14,6" />
 
                     <TextBox Grid.Row="1"
                              Text="{Binding CommitDescription, UpdateSourceTrigger=PropertyChanged}"

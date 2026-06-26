@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using Vcs.Desktop.Models;
 
 namespace Vcs.Desktop.Services;
@@ -9,6 +10,7 @@ namespace Vcs.Desktop.Services;
 public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposable
 {
     private readonly HttpClient _http;
+    private readonly LocalRepositoryStore _localRepositoryStore = new();
 
     private ApiRepositoryDataService(HttpClient http, UserModel currentUser, ProjectModel? currentProject)
     {
@@ -32,12 +34,22 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
 
         var user = CreateCurrentUser(options.Username);
         var projects = await LoadProjectsAsync(http);
+        var localRepositoryStore = new LocalRepositoryStore();
+        var localRepositories = localRepositoryStore.Load();
         foreach (var project in projects)
         {
+            if (localRepositories.TryGetValue(project.Id, out var localPath))
+            {
+                project.LocalPath = localPath;
+                EnsureLocalSnapshot(project, localRepositoryStore);
+                RefreshChangedFiles(project, localRepositoryStore);
+            }
+
             user.Projects.Add(project);
         }
 
-        var currentProject = user.Projects.FirstOrDefault(project => Directory.Exists(project.LocalPath));
+        var currentProject = user.Projects.FirstOrDefault(project => Directory.Exists(project.LocalPath))
+            ?? user.Projects.FirstOrDefault();
 
         return new ApiRepositoryDataService(http, user, currentProject);
     }
@@ -58,7 +70,9 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             new CreateCommitRequest(branch.Name, BuildCommitMessage(message, description), changes));
         response.EnsureSuccessStatusCode();
 
+        SaveCommittedSnapshot(project, changedFiles);
         await RefreshProjectAsync(project, branch.Name);
+        RefreshChangedFiles(project, _localRepositoryStore);
 
         var commit = project.Commits.FirstOrDefault();
         if (commit is not null)
@@ -78,6 +92,14 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
     public async Task PushAsync(ProjectModel project, BranchModel branch)
     {
         await RefreshProjectAsync(project, branch.Name);
+        RefreshChangedFiles(project, _localRepositoryStore);
+    }
+
+    public Task RefreshChangedFilesAsync(ProjectModel project)
+    {
+        EnsureLocalSnapshot(project, _localRepositoryStore);
+        RefreshChangedFiles(project, _localRepositoryStore);
+        return Task.CompletedTask;
     }
 
     public async Task<ProjectModel> CreateRepositoryAsync(string folderPath, string name, string description)
@@ -92,7 +114,9 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
 
         var project = await MapProjectAsync(_http, createdProject);
         project.LocalPath = folderPath;
-        LoadLocalFiles(project, folderPath);
+        _localRepositoryStore.Save(project);
+        _localRepositoryStore.SaveSnapshot(project, CaptureLocalSnapshot(project.LocalPath));
+        RefreshChangedFiles(project, _localRepositoryStore);
 
         CurrentUser.Projects.Insert(0, project);
         CurrentProject = project;
@@ -105,10 +129,47 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         response.EnsureSuccessStatusCode();
 
         CurrentUser.Projects.Remove(project);
+        _localRepositoryStore.Remove(project);
         if (CurrentProject == project)
         {
-            CurrentProject = CurrentUser.Projects.FirstOrDefault(item => Directory.Exists(item.LocalPath));
+            CurrentProject = CurrentUser.Projects.FirstOrDefault(item => Directory.Exists(item.LocalPath))
+                ?? CurrentUser.Projects.FirstOrDefault();
         }
+    }
+
+    public async Task<BranchModel> CreateBranchAsync(ProjectModel project, BranchModel sourceBranch, string branchName)
+    {
+        var response = await _http.PostAsJsonAsync(
+            $"api/projects/{project.Id}/branches",
+            new CreateBranchRequest(branchName.Trim(), sourceBranch.Name));
+        response.EnsureSuccessStatusCode();
+
+        await RefreshProjectAsync(project, branchName.Trim());
+        RefreshChangedFiles(project, _localRepositoryStore);
+        return project.Branches.First(branch => string.Equals(branch.Name, branchName.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    public async Task RenameRepositoryAsync(ProjectModel project, string newName)
+    {
+        var response = await _http.PatchAsJsonAsync(
+            $"api/projects/{project.Id}",
+            new UpdateProjectRequest(newName.Trim(), null, null));
+        response.EnsureSuccessStatusCode();
+
+        var updatedProject = await response.Content.ReadFromJsonAsync<ProjectResponse>();
+        project.Name = updatedProject?.Name ?? newName.Trim();
+    }
+
+    public async Task<BranchModel> RenameBranchAsync(ProjectModel project, BranchModel branch, string newName)
+    {
+        var response = await _http.PatchAsJsonAsync(
+            $"api/projects/{project.Id}/branches/{Uri.EscapeDataString(branch.Name)}",
+            new RenameBranchRequest(newName.Trim()));
+        response.EnsureSuccessStatusCode();
+
+        await RefreshProjectAsync(project, newName.Trim());
+        RefreshChangedFiles(project, _localRepositoryStore);
+        return project.Branches.First(item => string.Equals(item.Name, newName.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
     public async Task DeleteBranchAsync(ProjectModel project, BranchModel branch)
@@ -147,11 +208,6 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         foreach (var file in await LoadFilesAsync(_http, project.Id, branchName))
         {
             project.Files.Add(file);
-        }
-
-        if (Directory.Exists(project.LocalPath))
-        {
-            LoadLocalFiles(project, project.LocalPath);
         }
 
         project.Commits.Clear();
@@ -243,7 +299,6 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         return files
             .Where(file => !file.IsDirectory)
             .Select(file => file.Path)
-            .DefaultIfEmpty("README.md")
             .ToList();
     }
 
@@ -253,6 +308,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             $"api/projects/{projectId}/commits?branch={Uri.EscapeDataString(branch)}&take=20") ?? [];
 
         return commits
+            .Where(commit => !IsGeneratedInitialCommit(commit))
             .Select(commit => new CommitModel
             {
                 Sha = commit.Sha.Length > 7 ? commit.Sha[..7] : commit.Sha,
@@ -262,6 +318,12 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
                 ChangedFiles = 1
             })
             .ToList();
+    }
+
+    private static bool IsGeneratedInitialCommit(CommitResponse commit)
+    {
+        return string.Equals(commit.Author, "system", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(commit.Message, "Initial commit", StringComparison.Ordinal);
     }
 
     private static ProjectVisibility MapVisibility(string visibility)
@@ -310,6 +372,56 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         }
     }
 
+    private static void EnsureLocalSnapshot(ProjectModel project, LocalRepositoryStore localRepositoryStore)
+    {
+        if (!Directory.Exists(project.LocalPath))
+        {
+            return;
+        }
+
+        if (localRepositoryStore.LoadSnapshot(project.Id).Count == 0)
+        {
+            localRepositoryStore.SaveSnapshot(project, CaptureLocalSnapshot(project.LocalPath));
+        }
+    }
+
+    private static void RefreshChangedFiles(ProjectModel project, LocalRepositoryStore localRepositoryStore)
+    {
+        project.ChangedFiles.Clear();
+        if (!Directory.Exists(project.LocalPath))
+        {
+            return;
+        }
+
+        var snapshot = localRepositoryStore.LoadSnapshot(project.Id);
+        var current = CaptureLocalSnapshot(project.LocalPath);
+        foreach (var file in current)
+        {
+            if (!snapshot.TryGetValue(file.Key, out var previousHash)
+                || !string.Equals(previousHash, file.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                project.ChangedFiles.Add(file.Key);
+            }
+        }
+    }
+
+    private void SaveCommittedSnapshot(ProjectModel project, IReadOnlyCollection<string> changedFiles)
+    {
+        var snapshot = _localRepositoryStore.LoadSnapshot(project.Id)
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+
+        var current = CaptureLocalSnapshot(project.LocalPath);
+        foreach (var file in changedFiles)
+        {
+            if (current.TryGetValue(file, out var hash))
+            {
+                snapshot[file] = hash;
+            }
+        }
+
+        _localRepositoryStore.SaveSnapshot(project, snapshot);
+    }
+
     private static void LoadLocalFiles(ProjectModel project, string folderPath)
     {
         project.Files.Clear();
@@ -334,6 +446,40 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             .Take(200);
     }
 
+    private static Dictionary<string, string> CaptureLocalSnapshot(string folderPath)
+    {
+        if (!Directory.Exists(folderPath))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        var root = Path.GetFullPath(folderPath);
+        return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(path => !IsIgnoredPath(root, path))
+            .Select(path => new
+            {
+                Path = Path.GetRelativePath(root, path).Replace('\\', '/'),
+                Hash = ComputeFileHash(path)
+            })
+            .Where(file => !string.IsNullOrWhiteSpace(file.Hash))
+            .OrderBy(file => file.Path)
+            .Take(200)
+            .ToDictionary(file => file.Path, file => file.Hash, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string ComputeFileHash(string filePath)
+    {
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            return Convert.ToHexString(SHA256.HashData(stream));
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
     private static bool IsIgnoredPath(string root, string filePath)
     {
         var relativePath = Path.GetRelativePath(root, filePath);
@@ -342,6 +488,8 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
     }
 
     private sealed record CreateProjectRequest(string Name, string? Description, string Visibility);
+    private sealed record CreateBranchRequest(string Name, string? SourceBranch);
+    private sealed record RenameBranchRequest(string Name);
     private sealed record UpdateProjectRequest(string? Name, string? Description, string? Visibility);
     private sealed record ProjectResponse(Guid Id, string Name, string? Description, string Visibility, string DefaultBranch, string OwnerName, DateTime CreatedAtUtc);
     private sealed record BranchResponse(string Name, bool IsDefault);

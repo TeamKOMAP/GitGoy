@@ -120,7 +120,7 @@ public sealed class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(RepositorySetup));
         OnPropertyChanged(nameof(SidebarVisibility));
         RaiseNavigationState();
-        Navigate(RepositorySetup);
+        Navigate(_project is not null ? _project : RepositorySetup);
     }
 
     private void OpenProject(ProjectModel project)

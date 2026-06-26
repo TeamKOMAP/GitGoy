@@ -49,20 +49,10 @@
 
     <Grid Background="{StaticResource PageBrush}">
         <Grid.RowDefinitions>
-            <RowDefinition Height="74" />
-            <RowDefinition Height="4" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <TextBox Grid.Row="0"
-                 Margin="8"
-                 Tag="Поиск..."
-                 Style="{StaticResource SearchTextBoxStyle}" />
-
-        <Border Grid.Row="1"
-                Background="#000000" />
-
-        <Grid Grid.Row="2"
+        <Grid Grid.Row="0"
               Margin="32,28,32,32">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

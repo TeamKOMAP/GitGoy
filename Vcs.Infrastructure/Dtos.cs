@@ -13,6 +13,7 @@ public record MemberRes(Guid UserId, string Username, string Role);
 // Branches
 public record BranchRes(string Name, bool IsDefault);
 public record CreateBranchReq(string Name, string? SourceBranch);
+public record RenameBranchReq(string Name);
 
 // Commits
 public record FileChange(string Path, string? Content, string Operation = "add");

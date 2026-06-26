@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using System.Windows.Input;
 using Vcs.Desktop.Core;
 using Vcs.Desktop.Models;
@@ -11,12 +13,17 @@ namespace Vcs.Desktop.ViewModels;
 public sealed class ProjectViewModel : ObservableObject
 {
     private readonly IRepositoryDataService _dataService;
+    private readonly BranchModel _createBranchOption = new() { Name = "Create branch", IsCreateOption = true };
+    private FileSystemWatcher? _fileSystemWatcher;
     private bool _isUpdatingAllChangedFiles;
     private ProjectModel _selectedProject;
     private BranchModel _selectedBranch;
     private CommitModel? _selectedCommit;
     private string _commitMessage = string.Empty;
     private string _commitDescription = string.Empty;
+    private string _commitSearchText = string.Empty;
+    private string _editableRepositoryName = string.Empty;
+    private string _editableBranchName = string.Empty;
     private bool _isBusy;
 
     public ProjectViewModel(ProjectModel project, IRepositoryDataService dataService)
@@ -26,18 +33,30 @@ public sealed class ProjectViewModel : ObservableObject
         _selectedBranch = project.Branches.First();
         _selectedCommit = project.Commits.FirstOrDefault();
         ChangedFiles = CreateFileChanges(project);
+        BranchMenuItems = [];
+        RefreshBranchMenuItems();
+        Commits = [];
+        Project.Commits.CollectionChanged += Commits_CollectionChanged;
+        UpdateCommitsFilter();
+        InitializeEditFields();
+        StartLocalWatcher();
+        _ = RefreshChangedFilesAsync();
 
         CommitCommand = new RelayCommand(CreateCommit, CanCreateCommit);
         PushCommand = new RelayCommand(Push, () => Project.IsOwnedByCurrentUser && !IsBusy);
         OpenProjectFolderCommand = new RelayCommand(OpenProjectFolder, CanOpenProjectFolder);
         ToggleVisibilityCommand = new RelayCommand(ToggleVisibility, () => Project.IsOwnedByCurrentUser && !IsBusy);
+        CreateBranchCommand = new RelayCommand(CreateDefaultBranch, CanCreateDefaultBranch);
+        SaveRepositoryNameCommand = new RelayCommand(SaveRepositoryName, CanSaveRepositoryName);
+        SaveBranchNameCommand = new RelayCommand(SaveBranchName, CanSaveBranchName);
         DeleteBranchCommand = new RelayCommand(DeleteBranch, CanDeleteBranch);
     }
 
     public ProjectModel Project => SelectedProject;
     public ObservableCollection<ProjectModel> Repositories => _dataService.CurrentUser.Projects;
     public ObservableCollection<BranchModel> Branches => Project.Branches;
-    public ObservableCollection<CommitModel> Commits => Project.Commits;
+    public ObservableCollection<BranchModel> BranchMenuItems { get; }
+    public ObservableCollection<CommitModel> Commits { get; }
     public ObservableCollection<string> Files => Project.Files;
     public ObservableCollection<FileChangeViewModel> ChangedFiles { get; private set; }
 
@@ -46,11 +65,19 @@ public sealed class ProjectViewModel : ObservableObject
         get => _selectedProject;
         set
         {
+            var oldProject = _selectedProject;
             if (SetProperty(ref _selectedProject, value))
             {
+                oldProject.Commits.CollectionChanged -= Commits_CollectionChanged;
                 SelectedBranch = Project.Branches.First();
                 SelectedCommit = Project.Commits.FirstOrDefault();
                 ChangedFiles = CreateFileChanges(Project);
+                RefreshBranchMenuItems();
+                Project.Commits.CollectionChanged += Commits_CollectionChanged;
+                UpdateCommitsFilter();
+                InitializeEditFields();
+                StartLocalWatcher();
+                _ = RefreshChangedFilesAsync();
 
                 OnPropertyChanged(nameof(Project));
                 OnPropertyChanged(nameof(Branches));
@@ -70,8 +97,22 @@ public sealed class ProjectViewModel : ObservableObject
         get => _selectedBranch;
         set
         {
+            if (value is null)
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (value.IsCreateOption)
+            {
+                _ = CreateDefaultBranchAsync();
+                OnPropertyChanged();
+                return;
+            }
+
             if (SetProperty(ref _selectedBranch, value))
             {
+                EditableBranchName = value.Name;
                 RaiseCommandStates();
             }
         }
@@ -101,6 +142,42 @@ public sealed class ProjectViewModel : ObservableObject
         set => SetProperty(ref _commitDescription, value);
     }
 
+    public string CommitSearchText
+    {
+        get => _commitSearchText;
+        set
+        {
+            if (SetProperty(ref _commitSearchText, value))
+            {
+                UpdateCommitsFilter();
+            }
+        }
+    }
+
+    public string EditableRepositoryName
+    {
+        get => _editableRepositoryName;
+        set
+        {
+            if (SetProperty(ref _editableRepositoryName, value))
+            {
+                RaiseCommandStates();
+            }
+        }
+    }
+
+    public string EditableBranchName
+    {
+        get => _editableBranchName;
+        set
+        {
+            if (SetProperty(ref _editableBranchName, value))
+            {
+                RaiseCommandStates();
+            }
+        }
+    }
+
     public bool IsBusy
     {
         get => _isBusy;
@@ -116,7 +193,7 @@ public sealed class ProjectViewModel : ObservableObject
     public bool CanWrite => Project.IsOwnedByCurrentUser;
     public bool AreAllChangedFilesIncluded
     {
-        get => ChangedFiles.All(file => file.IsIncluded);
+        get => ChangedFiles.Count > 0 && ChangedFiles.All(file => file.IsIncluded);
         set
         {
             if (_isUpdatingAllChangedFiles)
@@ -139,12 +216,15 @@ public sealed class ProjectViewModel : ObservableObject
     public string VisibilityToggleText => Project.Visibility == ProjectVisibility.Public
         ? "Сейчас это публичный репозиторий"
         : "Сейчас это приватный репозиторий";
-    public int ChangedFilesCount => Files.Count;
+    public int ChangedFilesCount => ChangedFiles.Count;
 
     public ICommand CommitCommand { get; }
     public ICommand PushCommand { get; }
     public ICommand OpenProjectFolderCommand { get; }
     public ICommand ToggleVisibilityCommand { get; }
+    public ICommand CreateBranchCommand { get; }
+    public ICommand SaveRepositoryNameCommand { get; }
+    public ICommand SaveBranchNameCommand { get; }
     public ICommand DeleteBranchCommand { get; }
 
     private bool CanCreateCommit()
@@ -157,6 +237,7 @@ public sealed class ProjectViewModel : ObservableObject
 
     private async void CreateCommit()
     {
+        var branchName = SelectedBranch.Name;
         IsBusy = true;
         try
         {
@@ -172,9 +253,12 @@ public sealed class ProjectViewModel : ObservableObject
                 CommitDescription,
                 includedFiles);
 
-            RefreshProjectBindings();
-            SelectedBranch = Project.Branches.FirstOrDefault(branch => branch.Name == SelectedBranch.Name)
-                ?? Project.Branches.First();
+            foreach (var file in includedFiles)
+            {
+                Project.ChangedFiles.Remove(file);
+            }
+
+            RefreshProjectBindings(branchName);
             SelectedCommit = commit;
             CommitMessage = string.Empty;
             CommitDescription = string.Empty;
@@ -190,11 +274,12 @@ public sealed class ProjectViewModel : ObservableObject
 
     private async void Push()
     {
+        var branchName = SelectedBranch.Name;
         IsBusy = true;
         try
         {
             await _dataService.PushAsync(Project, SelectedBranch);
-            RefreshProjectBindings();
+            RefreshProjectBindings(branchName);
         }
         catch
         {
@@ -258,6 +343,96 @@ public sealed class ProjectViewModel : ObservableObject
             && Branches.Count > 1;
     }
 
+    private bool CanCreateDefaultBranch()
+    {
+        return Project.IsOwnedByCurrentUser
+            && !IsBusy
+            && Branches.Count > 0;
+    }
+
+    private async void CreateDefaultBranch()
+    {
+        await CreateDefaultBranchAsync();
+    }
+
+    private async Task CreateDefaultBranchAsync()
+    {
+        if (!CanCreateDefaultBranch())
+        {
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var branch = await _dataService.CreateBranchAsync(Project, SelectedBranch, CreateDefaultBranchName());
+            RefreshProjectBindings(branch.Name);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanSaveRepositoryName()
+    {
+        return Project.IsOwnedByCurrentUser
+            && !IsBusy
+            && !string.IsNullOrWhiteSpace(EditableRepositoryName)
+            && !string.Equals(Project.Name, EditableRepositoryName.Trim(), StringComparison.Ordinal);
+    }
+
+    private async void SaveRepositoryName()
+    {
+        IsBusy = true;
+        try
+        {
+            await _dataService.RenameRepositoryAsync(Project, EditableRepositoryName);
+            EditableRepositoryName = Project.Name;
+            OnPropertyChanged(nameof(Project));
+            OnPropertyChanged(nameof(Repositories));
+        }
+        catch
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    private bool CanSaveBranchName()
+    {
+        var branchName = EditableBranchName.Trim();
+        return Project.IsOwnedByCurrentUser
+            && !IsBusy
+            && !string.IsNullOrWhiteSpace(branchName)
+            && !SelectedBranch.IsCreateOption
+            && !string.Equals(SelectedBranch.Name, branchName, StringComparison.Ordinal)
+            && !Branches.Any(branch => branch != SelectedBranch
+                && string.Equals(branch.Name, branchName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async void SaveBranchName()
+    {
+        IsBusy = true;
+        try
+        {
+            var branch = await _dataService.RenameBranchAsync(Project, SelectedBranch, EditableBranchName);
+            RefreshProjectBindings(branch.Name);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
     private async void DeleteBranch()
     {
         IsBusy = true;
@@ -285,7 +460,7 @@ public sealed class ProjectViewModel : ObservableObject
     private ObservableCollection<FileChangeViewModel> CreateFileChanges(ProjectModel project)
     {
         var changes = new ObservableCollection<FileChangeViewModel>(
-            project.Files.Select(file => new FileChangeViewModel(file)));
+            project.ChangedFiles.Select(file => new FileChangeViewModel(file)));
 
         foreach (var change in changes)
         {
@@ -319,6 +494,21 @@ public sealed class ProjectViewModel : ObservableObject
             visibilityCommand.RaiseCanExecuteChanged();
         }
 
+        if (CreateBranchCommand is RelayCommand createBranchCommand)
+        {
+            createBranchCommand.RaiseCanExecuteChanged();
+        }
+
+        if (SaveRepositoryNameCommand is RelayCommand saveRepositoryNameCommand)
+        {
+            saveRepositoryNameCommand.RaiseCanExecuteChanged();
+        }
+
+        if (SaveBranchNameCommand is RelayCommand saveBranchNameCommand)
+        {
+            saveBranchNameCommand.RaiseCanExecuteChanged();
+        }
+
         if (OpenProjectFolderCommand is RelayCommand folderCommand)
         {
             folderCommand.RaiseCanExecuteChanged();
@@ -330,14 +520,135 @@ public sealed class ProjectViewModel : ObservableObject
         }
     }
 
-    private void RefreshProjectBindings()
+    private void RefreshProjectBindings(string? selectedBranchName = null)
     {
+        selectedBranchName ??= SelectedBranch.Name;
         ChangedFiles = CreateFileChanges(Project);
+        RefreshBranchMenuItems();
+        RestoreSelectedBranch(selectedBranchName);
+        UpdateCommitsFilter();
+        OnPropertyChanged(nameof(Project));
         OnPropertyChanged(nameof(Branches));
+        OnPropertyChanged(nameof(BranchMenuItems));
         OnPropertyChanged(nameof(Commits));
         OnPropertyChanged(nameof(Files));
         OnPropertyChanged(nameof(ChangedFiles));
         OnPropertyChanged(nameof(ChangedFilesCount));
         OnPropertyChanged(nameof(AreAllChangedFilesIncluded));
+    }
+
+    private async Task RefreshChangedFilesAsync()
+    {
+        await _dataService.RefreshChangedFilesAsync(Project);
+        RefreshProjectBindings();
+        RaiseCommandStates();
+    }
+
+    private void RefreshBranchMenuItems()
+    {
+        BranchMenuItems.Clear();
+        foreach (var branch in Branches)
+        {
+            BranchMenuItems.Add(branch);
+        }
+
+        BranchMenuItems.Add(_createBranchOption);
+    }
+
+    private void InitializeEditFields()
+    {
+        EditableRepositoryName = Project.Name;
+        EditableBranchName = SelectedBranch.Name;
+    }
+
+    private void RestoreSelectedBranch(string branchName)
+    {
+        var branch = Branches.FirstOrDefault(item => string.Equals(item.Name, branchName, StringComparison.OrdinalIgnoreCase))
+            ?? Branches.FirstOrDefault();
+        if (branch is null)
+        {
+            return;
+        }
+
+        _selectedBranch = branch;
+        EditableBranchName = branch.Name;
+        OnPropertyChanged(nameof(SelectedBranch));
+    }
+
+    private string CreateDefaultBranchName()
+    {
+        const string baseName = "new-branch";
+        if (!Branches.Any(branch => string.Equals(branch.Name, baseName, StringComparison.OrdinalIgnoreCase)))
+        {
+            return baseName;
+        }
+
+        var index = 2;
+        while (Branches.Any(branch => string.Equals(branch.Name, $"{baseName}-{index}", StringComparison.OrdinalIgnoreCase)))
+        {
+            index++;
+        }
+
+        return $"{baseName}-{index}";
+    }
+
+    private void StartLocalWatcher()
+    {
+        _fileSystemWatcher?.Dispose();
+        _fileSystemWatcher = null;
+
+        if (!Directory.Exists(Project.LocalPath))
+        {
+            return;
+        }
+
+        _fileSystemWatcher = new FileSystemWatcher(Project.LocalPath)
+        {
+            IncludeSubdirectories = true,
+            NotifyFilter = NotifyFilters.FileName
+                | NotifyFilters.LastWrite
+                | NotifyFilters.Size
+                | NotifyFilters.CreationTime
+        };
+
+        _fileSystemWatcher.Changed += LocalFilesChanged;
+        _fileSystemWatcher.Created += LocalFilesChanged;
+        _fileSystemWatcher.Renamed += LocalFilesChanged;
+        _fileSystemWatcher.EnableRaisingEvents = true;
+    }
+
+    private void LocalFilesChanged(object sender, FileSystemEventArgs e)
+    {
+        if (IsIgnoredWatcherPath(e.FullPath))
+        {
+            return;
+        }
+
+        _ = Application.Current.Dispatcher.InvokeAsync(async () => await RefreshChangedFilesAsync());
+    }
+
+    private static bool IsIgnoredWatcherPath(string path)
+    {
+        var parts = path.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return parts.Any(part => part is ".git" or ".vs" or "bin" or "obj" or "node_modules");
+    }
+
+    private void Commits_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        UpdateCommitsFilter();
+    }
+
+    private void UpdateCommitsFilter()
+    {
+        var query = CommitSearchText.Trim();
+        var filtered = string.IsNullOrWhiteSpace(query)
+            ? Project.Commits
+            : Project.Commits.Where(commit => commit.Message.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        Commits.Clear();
+        foreach (var commit in filtered)
+        {
+            Commits.Add(commit);
+        }
     }
 }

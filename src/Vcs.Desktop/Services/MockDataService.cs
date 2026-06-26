@@ -9,7 +9,8 @@ public sealed class MockDataService : IRepositoryDataService
     public MockDataService()
     {
         CurrentUser = CreateCurrentUser();
-        CurrentProject = CurrentUser.Projects.FirstOrDefault(project => Directory.Exists(project.LocalPath));
+        CurrentProject = CurrentUser.Projects.FirstOrDefault(project => Directory.Exists(project.LocalPath))
+            ?? CurrentUser.Projects.FirstOrDefault();
     }
 
     public UserModel CurrentUser { get; }
@@ -47,15 +48,7 @@ public sealed class MockDataService : IRepositoryDataService
         var project = CreateProject(name.Trim(), description.Trim(), true, ProjectVisibility.Private, CurrentUser.UserName);
         project.LocalPath = folderPath;
         project.Files.Clear();
-
-        foreach (var file in Directory.EnumerateFiles(folderPath, "*", SearchOption.AllDirectories)
-                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
-                     .Select(path => Path.GetRelativePath(folderPath, path).Replace('\\', '/'))
-                     .OrderBy(path => path)
-                     .Take(200))
-        {
-            project.Files.Add(file);
-        }
+        project.Files.Add("README.md");
 
         CurrentUser.Projects.Insert(0, project);
         CurrentProject = project;
@@ -67,10 +60,51 @@ public sealed class MockDataService : IRepositoryDataService
         CurrentUser.Projects.Remove(project);
         if (CurrentProject == project)
         {
-            CurrentProject = CurrentUser.Projects.FirstOrDefault(item => Directory.Exists(item.LocalPath));
+            CurrentProject = CurrentUser.Projects.FirstOrDefault(item => Directory.Exists(item.LocalPath))
+                ?? CurrentUser.Projects.FirstOrDefault();
         }
 
         return Task.CompletedTask;
+    }
+
+    public Task RefreshChangedFilesAsync(ProjectModel project)
+    {
+        project.ChangedFiles.Clear();
+        if (!Directory.Exists(project.LocalPath))
+        {
+            return Task.CompletedTask;
+        }
+
+        foreach (var file in Directory.EnumerateFiles(project.LocalPath, "*", SearchOption.AllDirectories)
+                     .Where(path => !path.Contains($"{Path.DirectorySeparatorChar}.git{Path.DirectorySeparatorChar}"))
+                     .Select(path => Path.GetRelativePath(project.LocalPath, path).Replace('\\', '/'))
+                     .Where(path => !project.Files.Contains(path))
+                     .OrderBy(path => path)
+                     .Take(200))
+        {
+            project.ChangedFiles.Add(file);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task<BranchModel> CreateBranchAsync(ProjectModel project, BranchModel sourceBranch, string branchName)
+    {
+        var branch = new BranchModel { Name = branchName.Trim() };
+        project.Branches.Add(branch);
+        return Task.FromResult(branch);
+    }
+
+    public Task RenameRepositoryAsync(ProjectModel project, string newName)
+    {
+        project.Name = newName.Trim();
+        return Task.CompletedTask;
+    }
+
+    public Task<BranchModel> RenameBranchAsync(ProjectModel project, BranchModel branch, string newName)
+    {
+        branch.Name = newName.Trim();
+        return Task.FromResult(branch);
     }
 
     public Task DeleteBranchAsync(ProjectModel project, BranchModel branch)

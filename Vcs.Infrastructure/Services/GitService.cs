@@ -27,13 +27,6 @@ public class GitService
             return;
         }
 
-        var initialCommit = new CommitData(
-            Guid.NewGuid().ToString("N"),
-            "Initial commit",
-            "system",
-            DateTime.UtcNow,
-            [new FileChange("README.md", "# Repository" + Environment.NewLine, "added")]);
-
         var data = new RepositoryData
         {
             Branches =
@@ -42,8 +35,8 @@ public class GitService
                 {
                     Name = "main",
                     IsDefault = true,
-                    Files = [new FileData("README.md", "# Repository" + Environment.NewLine)],
-                    Commits = [initialCommit]
+                    Files = [],
+                    Commits = []
                 }
             ]
         };
@@ -94,6 +87,23 @@ public class GitService
         }
 
         data.Branches.Remove(branch);
+        await SaveAsync(projectId, data);
+    }
+
+    public async Task RenameBranchAsync(Guid projectId, string oldName, string newName)
+    {
+        var normalizedName = string.IsNullOrWhiteSpace(newName)
+            ? throw new InvalidOperationException("Branch name is required")
+            : newName.Trim();
+
+        var data = await LoadAsync(projectId);
+        if (data.Branches.Any(branch => string.Equals(branch.Name, normalizedName, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException($"Branch '{normalizedName}' exists");
+        }
+
+        var branchToRename = FindBranch(data, oldName);
+        branchToRename.Name = normalizedName;
         await SaveAsync(projectId, data);
     }
 

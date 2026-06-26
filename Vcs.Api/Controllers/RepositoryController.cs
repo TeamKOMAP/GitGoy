@@ -35,6 +35,14 @@ public class RepositoryController : ControllerBase
         catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    [HttpPatch("branches/{name}")]
+    public async Task<IActionResult> RenameBranch(Guid projectId, string name, [FromBody] RenameBranchReq dto)
+    {
+        if (!await _projects.HasWriteAccessAsync(projectId, await GetUserIdAsync())) return Forbid();
+        try { await _git.RenameBranchAsync(projectId, name, dto.Name); return Ok(new { name = dto.Name }); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
     [HttpDelete("branches/{name}")]
     public async Task<IActionResult> DeleteBranch(Guid projectId, string name)
     {
