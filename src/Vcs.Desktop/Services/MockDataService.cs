@@ -40,6 +40,20 @@ public sealed class MockDataService : IRepositoryDataService
 
     public Task PushAsync(ProjectModel project, BranchModel branch)
     {
+        var push = new PushModel
+        {
+            BranchName = branch.Name,
+            CommitMessage = project.Commits.FirstOrDefault()?.Message ?? "No commits yet",
+            AuthorName = CurrentUser.UserName,
+            CreatedAt = DateTime.Now
+        };
+
+        foreach (var file in project.Files)
+        {
+            push.Files.Add(file);
+        }
+
+        project.Pushes.Insert(0, push);
         return Task.CompletedTask;
     }
 
@@ -67,7 +81,15 @@ public sealed class MockDataService : IRepositoryDataService
         return Task.CompletedTask;
     }
 
-    public Task RefreshChangedFilesAsync(ProjectModel project)
+    public Task LoadBranchAsync(ProjectModel project, BranchModel branch)
+    {
+        project.Files.Clear();
+        project.Commits.Clear();
+        project.Pushes.Clear();
+        return RefreshChangedFilesAsync(project, branch);
+    }
+
+    public Task RefreshChangedFilesAsync(ProjectModel project, BranchModel branch)
     {
         project.ChangedFiles.Clear();
         if (!Directory.Exists(project.LocalPath))

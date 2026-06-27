@@ -66,12 +66,12 @@ public class GitService
             throw new InvalidOperationException($"Branch '{name}' exists");
         }
 
-        var source = FindBranch(data, sourceBranch ?? data.DefaultBranchName);
         data.Branches.Add(new BranchData
         {
             Name = name,
-            Files = source.Files.Select(file => new FileData(file.Path, file.Content)).ToList(),
-            Commits = source.Commits.ToList()
+            Files = [],
+            Commits = [],
+            Pushes = []
         });
 
         await SaveAsync(projectId, data);
@@ -90,6 +90,41 @@ public class GitService
         await SaveAsync(projectId, data);
     }
 
+    public async Task<List<PushRes>> GetPushesAsync(Guid projectId, string branch)
+    {
+        var data = await LoadAsync(projectId);
+        return FindBranch(data, branch).Pushes
+            .OrderByDescending(push => push.When)
+            .Select(push => new PushRes(push.Id, push.Branch, push.CommitMessage, push.Author, push.When, push.Files))
+            .ToList();
+    }
+
+    public async Task<PushRes> CreatePushAsync(Guid projectId, string branch, string author)
+    {
+        var data = await LoadAsync(projectId);
+        var targetBranch = FindBranch(data, branch);
+        var latestCommit = targetBranch.Commits
+            .OrderByDescending(commit => commit.When)
+            .FirstOrDefault();
+
+        var push = new PushData
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Branch = targetBranch.Name,
+            CommitMessage = latestCommit?.Message,
+            Author = author,
+            When = DateTime.UtcNow,
+            Files = targetBranch.Files
+                .Select(file => file.Path)
+                .OrderBy(path => path)
+                .ToList()
+        };
+
+        targetBranch.Pushes.Insert(0, push);
+        await SaveAsync(projectId, data);
+        return new PushRes(push.Id, push.Branch, push.CommitMessage, push.Author, push.When, push.Files);
+    }
+
     public async Task RenameBranchAsync(Guid projectId, string oldName, string newName)
     {
         var normalizedName = string.IsNullOrWhiteSpace(newName)
@@ -104,6 +139,11 @@ public class GitService
 
         var branchToRename = FindBranch(data, oldName);
         branchToRename.Name = normalizedName;
+        foreach (var push in branchToRename.Pushes)
+        {
+            push.Branch = normalizedName;
+        }
+
         await SaveAsync(projectId, data);
     }
 
@@ -226,6 +266,7 @@ public class GitService
         public bool IsDefault { get; set; }
         public List<FileData> Files { get; set; } = [];
         public List<CommitData> Commits { get; set; } = [];
+        public List<PushData> Pushes { get; set; } = [];
     }
 
     private sealed class FileData
@@ -250,4 +291,14 @@ public class GitService
         string Author,
         DateTime When,
         List<FileChange> Changes);
+
+    private sealed class PushData
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Branch { get; set; } = string.Empty;
+        public string? CommitMessage { get; set; }
+        public string Author { get; set; } = string.Empty;
+        public DateTime When { get; set; }
+        public List<string> Files { get; set; } = [];
+    }
 }

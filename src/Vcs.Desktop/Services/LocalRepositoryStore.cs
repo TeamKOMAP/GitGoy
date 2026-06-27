@@ -22,10 +22,20 @@ internal sealed class LocalRepositoryStore
         return LoadStates().ToDictionary(item => item.Key, item => item.Value.LocalPath);
     }
 
-    public IReadOnlyDictionary<string, string> LoadSnapshot(Guid projectId)
+    public IReadOnlyDictionary<string, string> LoadSnapshot(Guid projectId, string branchName)
     {
         var states = LoadStates();
-        return states.TryGetValue(projectId, out var state)
+        if (!states.TryGetValue(projectId, out var state))
+        {
+            return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        if (state.BranchFileHashes.TryGetValue(branchName, out var branchSnapshot))
+        {
+            return new Dictionary<string, string>(branchSnapshot, StringComparer.OrdinalIgnoreCase);
+        }
+
+        return string.Equals(branchName, "main", StringComparison.OrdinalIgnoreCase)
             ? new Dictionary<string, string>(state.FileHashes, StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     }
@@ -40,12 +50,12 @@ internal sealed class LocalRepositoryStore
         var states = LoadStates();
         states[project.Id] = states.TryGetValue(project.Id, out var existing)
             ? existing with { LocalPath = project.LocalPath }
-            : new LocalRepositoryState(project.LocalPath, new Dictionary<string, string>());
+            : new LocalRepositoryState(project.LocalPath, new Dictionary<string, string>(), new Dictionary<string, Dictionary<string, string>>());
 
         SaveStates(states);
     }
 
-    public void SaveSnapshot(ProjectModel project, IReadOnlyDictionary<string, string> fileHashes)
+    public void SaveSnapshot(ProjectModel project, string branchName, IReadOnlyDictionary<string, string> fileHashes)
     {
         if (string.IsNullOrWhiteSpace(project.LocalPath))
         {
@@ -53,9 +63,21 @@ internal sealed class LocalRepositoryStore
         }
 
         var states = LoadStates();
+        var existing = states.TryGetValue(project.Id, out var state)
+            ? state
+            : new LocalRepositoryState(project.LocalPath, [], []);
+
+        var branchFileHashes = existing.BranchFileHashes
+            .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        branchFileHashes[branchName] = fileHashes.ToDictionary(
+            item => item.Key,
+            item => item.Value,
+            StringComparer.OrdinalIgnoreCase);
+
         states[project.Id] = new LocalRepositoryState(
             project.LocalPath,
-            fileHashes.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase));
+            existing.FileHashes,
+            branchFileHashes);
 
         SaveStates(states);
     }
@@ -93,7 +115,7 @@ internal sealed class LocalRepositoryStore
                     var path = item.Value.GetString();
                     if (!string.IsNullOrWhiteSpace(path))
                     {
-                        repositories[id] = new LocalRepositoryState(path, []);
+                        repositories[id] = new LocalRepositoryState(path, [], []);
                     }
 
                     continue;
@@ -125,7 +147,30 @@ internal sealed class LocalRepositoryStore
                     }
                 }
 
-                repositories[id] = new LocalRepositoryState(localPath, fileHashes);
+                var branchFileHashes = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+                if (item.Value.TryGetProperty(nameof(LocalRepositoryState.BranchFileHashes), out var branchesElement)
+                    && branchesElement.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var branch in branchesElement.EnumerateObject())
+                    {
+                        var branchHashes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        if (branch.Value.ValueKind == JsonValueKind.Object)
+                        {
+                            foreach (var hash in branch.Value.EnumerateObject())
+                            {
+                                var value = hash.Value.GetString();
+                                if (!string.IsNullOrWhiteSpace(value))
+                                {
+                                    branchHashes[hash.Name] = value;
+                                }
+                            }
+                        }
+
+                        branchFileHashes[branch.Name] = branchHashes;
+                    }
+                }
+
+                repositories[id] = new LocalRepositoryState(localPath, fileHashes, branchFileHashes);
             }
 
             return repositories;
@@ -144,5 +189,6 @@ internal sealed class LocalRepositoryStore
 
     private sealed record LocalRepositoryState(
         string LocalPath,
-        Dictionary<string, string> FileHashes);
+        Dictionary<string, string> FileHashes,
+        Dictionary<string, Dictionary<string, string>> BranchFileHashes);
 }

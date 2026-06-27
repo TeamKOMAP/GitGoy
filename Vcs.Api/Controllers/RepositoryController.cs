@@ -79,6 +79,22 @@ public class RepositoryController : ControllerBase
         catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
     }
 
+    [HttpGet("pushes")]
+    public async Task<IActionResult> GetPushes(Guid projectId, [FromQuery] string branch = "main")
+    {
+        if (!await _projects.HasReadAccessAsync(projectId, await GetUserIdAsync())) return Forbid();
+        try { return Ok(await _git.GetPushesAsync(projectId, branch)); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
+    [HttpPost("pushes")]
+    public async Task<IActionResult> CreatePush(Guid projectId, [FromBody] CreatePushReq dto)
+    {
+        if (!await _projects.HasWriteAccessAsync(projectId, await GetUserIdAsync())) return Forbid();
+        try { return Ok(await _git.CreatePushAsync(projectId, dto.Branch, UserName)); }
+        catch (Exception ex) { return BadRequest(new { error = ex.Message }); }
+    }
+
     [HttpGet("files")]
     public async Task<IActionResult> GetFiles(Guid projectId, [FromQuery] string branch = "main", [FromQuery] string? path = null)
     {

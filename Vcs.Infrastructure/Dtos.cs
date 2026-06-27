@@ -20,6 +20,8 @@ public record FileChange(string Path, string? Content, string Operation = "add")
 public record CreateCommitReq(string Branch, string Message, List<FileChange> Changes);
 public record CommitRes(string Sha, string Message, string Author, DateTime When);
 public record CommitDetailRes(string Sha, string Message, string Author, DateTime When, List<FileChange> Changes);
+public record CreatePushReq(string Branch);
+public record PushRes(string Id, string Branch, string? CommitMessage, string Author, DateTime When, List<string> Files);
 
 // Files & Diff
 public record FileEntryRes(string Name, string Path, bool IsDirectory);

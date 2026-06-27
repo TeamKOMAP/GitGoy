@@ -41,8 +41,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             if (localRepositories.TryGetValue(project.Id, out var localPath))
             {
                 project.LocalPath = localPath;
-                EnsureLocalSnapshot(project, localRepositoryStore);
-                RefreshChangedFiles(project, localRepositoryStore);
+                RefreshChangedFiles(project, project.Branches.FirstOrDefault(branch => branch.IsDefault)?.Name ?? "main", localRepositoryStore);
             }
 
             user.Projects.Add(project);
@@ -70,9 +69,9 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             new CreateCommitRequest(branch.Name, BuildCommitMessage(message, description), changes));
         response.EnsureSuccessStatusCode();
 
-        SaveCommittedSnapshot(project, changedFiles);
+        SaveCommittedSnapshot(project, branch.Name, changedFiles);
         await RefreshProjectAsync(project, branch.Name);
-        RefreshChangedFiles(project, _localRepositoryStore);
+        RefreshChangedFiles(project, branch.Name, _localRepositoryStore);
 
         var commit = project.Commits.FirstOrDefault();
         if (commit is not null)
@@ -91,14 +90,24 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
 
     public async Task PushAsync(ProjectModel project, BranchModel branch)
     {
+        var response = await _http.PostAsJsonAsync(
+            $"api/projects/{project.Id}/pushes",
+            new CreatePushRequest(branch.Name));
+        response.EnsureSuccessStatusCode();
+
         await RefreshProjectAsync(project, branch.Name);
-        RefreshChangedFiles(project, _localRepositoryStore);
+        RefreshChangedFiles(project, branch.Name, _localRepositoryStore);
     }
 
-    public Task RefreshChangedFilesAsync(ProjectModel project)
+    public async Task LoadBranchAsync(ProjectModel project, BranchModel branch)
     {
-        EnsureLocalSnapshot(project, _localRepositoryStore);
-        RefreshChangedFiles(project, _localRepositoryStore);
+        await RefreshProjectAsync(project, branch.Name);
+        RefreshChangedFiles(project, branch.Name, _localRepositoryStore);
+    }
+
+    public Task RefreshChangedFilesAsync(ProjectModel project, BranchModel branch)
+    {
+        RefreshChangedFiles(project, branch.Name, _localRepositoryStore);
         return Task.CompletedTask;
     }
 
@@ -115,8 +124,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         var project = await MapProjectAsync(_http, createdProject);
         project.LocalPath = folderPath;
         _localRepositoryStore.Save(project);
-        _localRepositoryStore.SaveSnapshot(project, CaptureLocalSnapshot(project.LocalPath));
-        RefreshChangedFiles(project, _localRepositoryStore);
+        RefreshChangedFiles(project, project.Branches.First().Name, _localRepositoryStore);
 
         CurrentUser.Projects.Insert(0, project);
         CurrentProject = project;
@@ -145,7 +153,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         response.EnsureSuccessStatusCode();
 
         await RefreshProjectAsync(project, branchName.Trim());
-        RefreshChangedFiles(project, _localRepositoryStore);
+        RefreshChangedFiles(project, branchName.Trim(), _localRepositoryStore);
         return project.Branches.First(branch => string.Equals(branch.Name, branchName.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
@@ -168,7 +176,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         response.EnsureSuccessStatusCode();
 
         await RefreshProjectAsync(project, newName.Trim());
-        RefreshChangedFiles(project, _localRepositoryStore);
+        RefreshChangedFiles(project, newName.Trim(), _localRepositoryStore);
         return project.Branches.First(item => string.Equals(item.Name, newName.Trim(), StringComparison.OrdinalIgnoreCase));
     }
 
@@ -214,6 +222,12 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         foreach (var commit in await LoadCommitsAsync(_http, project.Id, branchName))
         {
             project.Commits.Add(commit);
+        }
+
+        project.Pushes.Clear();
+        foreach (var push in await LoadPushesAsync(_http, project.Id, branchName))
+        {
+            project.Pushes.Add(push);
         }
     }
 
@@ -274,6 +288,12 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             project.Commits.Add(commit);
         }
 
+        var pushes = await LoadPushesAsync(http, project.Id, defaultBranch);
+        foreach (var push in pushes)
+        {
+            project.Pushes.Add(push);
+        }
+
         if (project.Branches.Count == 0)
         {
             project.Branches.Add(new BranchModel { Name = defaultBranch, IsDefault = true });
@@ -318,6 +338,33 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
                 ChangedFiles = 1
             })
             .ToList();
+    }
+
+    private static async Task<List<PushModel>> LoadPushesAsync(HttpClient http, Guid projectId, string branch)
+    {
+        var pushes = await http.GetFromJsonAsync<List<PushResponse>>(
+            $"api/projects/{projectId}/pushes?branch={Uri.EscapeDataString(branch)}") ?? [];
+
+        return pushes.Select(push =>
+        {
+            var model = new PushModel
+            {
+                Id = push.Id,
+                BranchName = push.Branch,
+                CommitMessage = string.IsNullOrWhiteSpace(push.CommitMessage)
+                    ? "No commits yet"
+                    : push.CommitMessage,
+                AuthorName = push.Author,
+                CreatedAt = push.When.ToLocalTime()
+            };
+
+            foreach (var file in push.Files)
+            {
+                model.Files.Add(file);
+            }
+
+            return model;
+        }).ToList();
     }
 
     private static bool IsGeneratedInitialCommit(CommitResponse commit)
@@ -372,20 +419,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         }
     }
 
-    private static void EnsureLocalSnapshot(ProjectModel project, LocalRepositoryStore localRepositoryStore)
-    {
-        if (!Directory.Exists(project.LocalPath))
-        {
-            return;
-        }
-
-        if (localRepositoryStore.LoadSnapshot(project.Id).Count == 0)
-        {
-            localRepositoryStore.SaveSnapshot(project, CaptureLocalSnapshot(project.LocalPath));
-        }
-    }
-
-    private static void RefreshChangedFiles(ProjectModel project, LocalRepositoryStore localRepositoryStore)
+    private static void RefreshChangedFiles(ProjectModel project, string branchName, LocalRepositoryStore localRepositoryStore)
     {
         project.ChangedFiles.Clear();
         if (!Directory.Exists(project.LocalPath))
@@ -393,7 +427,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             return;
         }
 
-        var snapshot = localRepositoryStore.LoadSnapshot(project.Id);
+        var snapshot = localRepositoryStore.LoadSnapshot(project.Id, branchName);
         var current = CaptureLocalSnapshot(project.LocalPath);
         foreach (var file in current)
         {
@@ -405,9 +439,9 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
         }
     }
 
-    private void SaveCommittedSnapshot(ProjectModel project, IReadOnlyCollection<string> changedFiles)
+    private void SaveCommittedSnapshot(ProjectModel project, string branchName, IReadOnlyCollection<string> changedFiles)
     {
-        var snapshot = _localRepositoryStore.LoadSnapshot(project.Id)
+        var snapshot = _localRepositoryStore.LoadSnapshot(project.Id, branchName)
             .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
 
         var current = CaptureLocalSnapshot(project.LocalPath);
@@ -419,7 +453,7 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
             }
         }
 
-        _localRepositoryStore.SaveSnapshot(project, snapshot);
+        _localRepositoryStore.SaveSnapshot(project, branchName, snapshot);
     }
 
     private static void LoadLocalFiles(ProjectModel project, string folderPath)
@@ -489,11 +523,13 @@ public sealed class ApiRepositoryDataService : IRepositoryDataService, IDisposab
 
     private sealed record CreateProjectRequest(string Name, string? Description, string Visibility);
     private sealed record CreateBranchRequest(string Name, string? SourceBranch);
+    private sealed record CreatePushRequest(string Branch);
     private sealed record RenameBranchRequest(string Name);
     private sealed record UpdateProjectRequest(string? Name, string? Description, string? Visibility);
     private sealed record ProjectResponse(Guid Id, string Name, string? Description, string Visibility, string DefaultBranch, string OwnerName, DateTime CreatedAtUtc);
     private sealed record BranchResponse(string Name, bool IsDefault);
     private sealed record CommitResponse(string Sha, string Message, string Author, DateTime When);
+    private sealed record PushResponse(string Id, string Branch, string? CommitMessage, string Author, DateTime When, List<string> Files);
     private sealed record FileEntryResponse(string Name, string Path, bool IsDirectory);
     private sealed record FileChangeRequest(string Path, string? Content, string Operation);
     private sealed record CreateCommitRequest(string Branch, string Message, List<FileChangeRequest> Changes);

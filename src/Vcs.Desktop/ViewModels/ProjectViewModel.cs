@@ -19,6 +19,7 @@ public sealed class ProjectViewModel : ObservableObject
     private ProjectModel _selectedProject;
     private BranchModel _selectedBranch;
     private CommitModel? _selectedCommit;
+    private PushModel? _selectedPush;
     private string _commitMessage = string.Empty;
     private string _commitDescription = string.Empty;
     private string _commitSearchText = string.Empty;
@@ -32,18 +33,22 @@ public sealed class ProjectViewModel : ObservableObject
         _selectedProject = project;
         _selectedBranch = project.Branches.First();
         _selectedCommit = project.Commits.FirstOrDefault();
+        _selectedPush = project.Pushes.FirstOrDefault();
         ChangedFiles = CreateFileChanges(project);
         BranchMenuItems = [];
         RefreshBranchMenuItems();
         Commits = [];
+        Pushes = [];
         Project.Commits.CollectionChanged += Commits_CollectionChanged;
+        Project.Pushes.CollectionChanged += Pushes_CollectionChanged;
         UpdateCommitsFilter();
+        UpdatePushesFilter();
         InitializeEditFields();
         StartLocalWatcher();
         _ = RefreshChangedFilesAsync();
 
         CommitCommand = new RelayCommand(CreateCommit, CanCreateCommit);
-        PushCommand = new RelayCommand(Push, () => Project.IsOwnedByCurrentUser && !IsBusy);
+        PushCommand = new RelayCommand(Push, CanPush);
         OpenProjectFolderCommand = new RelayCommand(OpenProjectFolder, CanOpenProjectFolder);
         ToggleVisibilityCommand = new RelayCommand(ToggleVisibility, () => Project.IsOwnedByCurrentUser && !IsBusy);
         CreateBranchCommand = new RelayCommand(CreateDefaultBranch, CanCreateDefaultBranch);
@@ -57,6 +62,7 @@ public sealed class ProjectViewModel : ObservableObject
     public ObservableCollection<BranchModel> Branches => Project.Branches;
     public ObservableCollection<BranchModel> BranchMenuItems { get; }
     public ObservableCollection<CommitModel> Commits { get; }
+    public ObservableCollection<PushModel> Pushes { get; }
     public ObservableCollection<string> Files => Project.Files;
     public ObservableCollection<FileChangeViewModel> ChangedFiles { get; private set; }
 
@@ -69,12 +75,16 @@ public sealed class ProjectViewModel : ObservableObject
             if (SetProperty(ref _selectedProject, value))
             {
                 oldProject.Commits.CollectionChanged -= Commits_CollectionChanged;
+                oldProject.Pushes.CollectionChanged -= Pushes_CollectionChanged;
                 SelectedBranch = Project.Branches.First();
                 SelectedCommit = Project.Commits.FirstOrDefault();
+                SelectedPush = Project.Pushes.FirstOrDefault();
                 ChangedFiles = CreateFileChanges(Project);
                 RefreshBranchMenuItems();
                 Project.Commits.CollectionChanged += Commits_CollectionChanged;
+                Project.Pushes.CollectionChanged += Pushes_CollectionChanged;
                 UpdateCommitsFilter();
+                UpdatePushesFilter();
                 InitializeEditFields();
                 StartLocalWatcher();
                 _ = RefreshChangedFilesAsync();
@@ -82,6 +92,7 @@ public sealed class ProjectViewModel : ObservableObject
                 OnPropertyChanged(nameof(Project));
                 OnPropertyChanged(nameof(Branches));
                 OnPropertyChanged(nameof(Commits));
+                OnPropertyChanged(nameof(Pushes));
                 OnPropertyChanged(nameof(Files));
                 OnPropertyChanged(nameof(ChangedFiles));
                 OnPropertyChanged(nameof(CanWrite));
@@ -113,6 +124,7 @@ public sealed class ProjectViewModel : ObservableObject
             if (SetProperty(ref _selectedBranch, value))
             {
                 EditableBranchName = value.Name;
+                _ = LoadSelectedBranchAsync(value.Name);
                 RaiseCommandStates();
             }
         }
@@ -142,6 +154,12 @@ public sealed class ProjectViewModel : ObservableObject
         set => SetProperty(ref _commitDescription, value);
     }
 
+    public PushModel? SelectedPush
+    {
+        get => _selectedPush;
+        set => SetProperty(ref _selectedPush, value);
+    }
+
     public string CommitSearchText
     {
         get => _commitSearchText;
@@ -150,6 +168,7 @@ public sealed class ProjectViewModel : ObservableObject
             if (SetProperty(ref _commitSearchText, value))
             {
                 UpdateCommitsFilter();
+                UpdatePushesFilter();
             }
         }
     }
@@ -233,6 +252,13 @@ public sealed class ProjectViewModel : ObservableObject
             && !IsBusy
             && !string.IsNullOrWhiteSpace(CommitMessage)
             && ChangedFiles.Any(file => file.IsIncluded);
+    }
+
+    private bool CanPush()
+    {
+        return Project.IsOwnedByCurrentUser
+            && !IsBusy
+            && Project.Commits.Count > 0;
     }
 
     private async void CreateCommit()
@@ -435,6 +461,7 @@ public sealed class ProjectViewModel : ObservableObject
 
     private async void DeleteBranch()
     {
+        var branchIndex = Branches.IndexOf(SelectedBranch);
         IsBusy = true;
         try
         {
@@ -445,8 +472,12 @@ public sealed class ProjectViewModel : ObservableObject
                 Project.Branches.Add(new BranchModel { Name = "main", IsDefault = true });
             }
 
-            SelectedBranch = Project.Branches.FirstOrDefault(branch => branch.IsDefault)
+            var replacementIndex = Math.Clamp(branchIndex, 0, Math.Max(Branches.Count - 1, 0));
+            var replacementBranch = Branches.ElementAtOrDefault(replacementIndex)
+                ?? Project.Branches.FirstOrDefault(branch => branch.IsDefault)
                 ?? Project.Branches.First();
+            await _dataService.LoadBranchAsync(Project, replacementBranch);
+            RefreshProjectBindings(replacementBranch.Name);
         }
         catch
         {
@@ -527,10 +558,12 @@ public sealed class ProjectViewModel : ObservableObject
         RefreshBranchMenuItems();
         RestoreSelectedBranch(selectedBranchName);
         UpdateCommitsFilter();
+        UpdatePushesFilter();
         OnPropertyChanged(nameof(Project));
         OnPropertyChanged(nameof(Branches));
         OnPropertyChanged(nameof(BranchMenuItems));
         OnPropertyChanged(nameof(Commits));
+        OnPropertyChanged(nameof(Pushes));
         OnPropertyChanged(nameof(Files));
         OnPropertyChanged(nameof(ChangedFiles));
         OnPropertyChanged(nameof(ChangedFilesCount));
@@ -539,9 +572,32 @@ public sealed class ProjectViewModel : ObservableObject
 
     private async Task RefreshChangedFilesAsync()
     {
-        await _dataService.RefreshChangedFilesAsync(Project);
+        await _dataService.RefreshChangedFilesAsync(Project, SelectedBranch);
         RefreshProjectBindings();
         RaiseCommandStates();
+    }
+
+    private async Task LoadSelectedBranchAsync(string branchName)
+    {
+        IsBusy = true;
+        try
+        {
+            var branch = Branches.FirstOrDefault(item => string.Equals(item.Name, branchName, StringComparison.OrdinalIgnoreCase));
+            if (branch is null)
+            {
+                return;
+            }
+
+            await _dataService.LoadBranchAsync(Project, branch);
+            RefreshProjectBindings(branchName);
+        }
+        catch
+        {
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     private void RefreshBranchMenuItems()
@@ -638,6 +694,11 @@ public sealed class ProjectViewModel : ObservableObject
         UpdateCommitsFilter();
     }
 
+    private void Pushes_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        UpdatePushesFilter();
+    }
+
     private void UpdateCommitsFilter()
     {
         var query = CommitSearchText.Trim();
@@ -650,5 +711,24 @@ public sealed class ProjectViewModel : ObservableObject
         {
             Commits.Add(commit);
         }
+    }
+
+    private void UpdatePushesFilter()
+    {
+        var query = CommitSearchText.Trim();
+        var filtered = string.IsNullOrWhiteSpace(query)
+            ? Project.Pushes
+            : Project.Pushes.Where(push =>
+                push.BranchName.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || push.CommitMessage.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || push.Files.Any(file => file.Contains(query, StringComparison.OrdinalIgnoreCase)));
+
+        Pushes.Clear();
+        foreach (var push in filtered)
+        {
+            Pushes.Add(push);
+        }
+
+        SelectedPush = Pushes.FirstOrDefault();
     }
 }

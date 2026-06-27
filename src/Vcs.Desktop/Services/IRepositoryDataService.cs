@@ -15,7 +15,8 @@ public interface IRepositoryDataService
 
     Task<ProjectModel> CreateRepositoryAsync(string folderPath, string name, string description);
     Task DeleteRepositoryAsync(ProjectModel project);
-    Task RefreshChangedFilesAsync(ProjectModel project);
+    Task LoadBranchAsync(ProjectModel project, BranchModel branch);
+    Task RefreshChangedFilesAsync(ProjectModel project, BranchModel branch);
     Task<BranchModel> CreateBranchAsync(ProjectModel project, BranchModel sourceBranch, string branchName);
     Task RenameRepositoryAsync(ProjectModel project, string newName);
     Task<BranchModel> RenameBranchAsync(ProjectModel project, BranchModel branch, string newName);

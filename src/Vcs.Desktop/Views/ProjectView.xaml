@@ -379,6 +379,12 @@
                                             Style="{StaticResource RoundBlackButtonStyle}"
                                             Margin="0,8,0,0"
                                             Command="{Binding SaveBranchNameCommand}" />
+                                    <Button Content="Delete branch"
+                                            Style="{StaticResource RoundBlackButtonStyle}"
+                                            Height="34"
+                                            FontSize="13"
+                                            Margin="0,8,0,0"
+                                            Command="{Binding DeleteBranchCommand}" />
                                 </StackPanel>
                             </Border>
                         </ContextMenu>
@@ -603,8 +609,8 @@
 
                 <ListBox x:Name="CommitsList"
                          Grid.Row="0"
-                         ItemsSource="{Binding Commits}"
-                         SelectedItem="{Binding SelectedCommit}"
+                         ItemsSource="{Binding Pushes}"
+                         SelectedItem="{Binding SelectedPush}"
                          Background="{StaticResource PageBrush}"
                          BorderThickness="0"
                          PreviewMouseWheel="CommitsList_PreviewMouseWheel"
@@ -645,13 +651,16 @@
                                 <Border Grid.Row="0"
                                         Background="#000000"
                                         CornerRadius="12">
-                                    <TextBlock Text="{Binding Message}"
-                                               Foreground="#FFFFFF"
-                                               FontSize="16"
-                                               TextAlignment="Center"
-                                               TextTrimming="CharacterEllipsis"
-                                               VerticalAlignment="Center"
-                                               Margin="12,0" />
+                                    <Grid>
+                                        <TextBlock Text="{Binding Title}"
+                                                   Foreground="#FFFFFF"
+                                                   FontSize="16"
+                                                   TextAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Width="276" />
+                                    </Grid>
                                 </Border>
 
                                 <Border Grid.Row="2"
@@ -659,7 +668,7 @@
                                         CornerRadius="12"
                                         Padding="14,16">
                                     <StackPanel>
-                                        <ItemsControl ItemsSource="{Binding DataContext.Files, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                        <ItemsControl ItemsSource="{Binding Files}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
                                                     <DockPanel Margin="0,0,0,10">
@@ -688,11 +697,11 @@
                                                    TextWrapping="Wrap">
                                             <Run Text="{Binding AuthorName}" />
                                             <Run Text=" / " />
-                                            <Run Text="{Binding Sha}" />
+                                            <Run Text="{Binding BranchName}" />
                                             <Run Text=" / " />
                                             <Run Text="{Binding CreatedAt, StringFormat={}{0:dd.MM HH:mm}}" />
                                         </TextBlock>
-                                        <TextBlock Text="{Binding ChangedFiles, StringFormat={}{0} изменённых файлов}"
+                                        <TextBlock Text="{Binding FileCount, StringFormat={}{0} files in project}"
                                                    Margin="0,5,0,0"
                                                    Foreground="#C9CBD8"
                                                    FontSize="12" />

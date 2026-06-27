@@ -19,6 +19,7 @@ public sealed class ProjectModel
     public bool IsOwnedByCurrentUser { get; init; }
     public ObservableCollection<BranchModel> Branches { get; } = [];
     public ObservableCollection<CommitModel> Commits { get; } = [];
+    public ObservableCollection<PushModel> Pushes { get; } = [];
     public ObservableCollection<string> Files { get; } = [];
     public ObservableCollection<string> ChangedFiles { get; } = [];
 }
