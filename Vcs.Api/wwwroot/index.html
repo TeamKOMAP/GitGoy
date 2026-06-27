@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GitGoy Repository Browser</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <section id="loginScreen" class="login-screen">
+        <form id="loginForm" class="login-card">
+            <div class="login-brand">
+                <div class="brand-mark">G</div>
+                <div>
+                    <h1>GitGoy</h1>
+                    <p>Repository browser</p>
+                </div>
+            </div>
+
+            <label for="usernameInput">Login</label>
+            <input id="usernameInput" name="username" type="text" autocomplete="username" value="1" required>
+
+            <label for="passwordInput">Password</label>
+            <input id="passwordInput" name="password" type="password" autocomplete="current-password" value="1" required>
+
+            <button type="submit">Sign in</button>
+            <p id="loginError" class="login-error hidden"></p>
+        </form>
+    </section>
+
+    <main class="app-shell">
+        <aside class="repo-panel">
+            <div class="brand">
+                <div class="brand-mark">G</div>
+                <div>
+                    <h1>GitGoy</h1>
+                    <p><span id="currentUserLabel"></span> repositories</p>
+                </div>
+                <button id="logoutButton" class="logout-button" type="button">Logout</button>
+            </div>
+            <div class="repo-toolbar">
+                <input id="repoSearch" type="search" placeholder="Find a repository">
+            </div>
+            <div id="repoList" class="repo-list" aria-label="Repositories"></div>
+        </aside>
+
+        <section class="content-panel">
+            <header class="repo-header">
+                <div>
+                    <p class="eyebrow">Repository</p>
+                    <h2 id="repoTitle">Select a repository</h2>
+                    <p id="repoDescription" class="repo-description"></p>
+                </div>
+                <div class="branch-wrap">
+                    <label for="branchSelect">Branch</label>
+                    <select id="branchSelect" disabled></select>
+                </div>
+            </header>
+
+            <nav class="breadcrumbs" aria-label="Path">
+                <button id="backButton" type="button" disabled>Back</button>
+                <div id="breadcrumbs"></div>
+            </nav>
+
+            <section class="file-table" aria-label="Files">
+                <div class="table-head">
+                    <span>Name</span>
+                    <span>Type</span>
+                </div>
+                <div id="fileList" class="file-list"></div>
+                <div id="emptyState" class="empty-state">
+                    Select a repository to view files.
+                </div>
+            </section>
+        </section>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

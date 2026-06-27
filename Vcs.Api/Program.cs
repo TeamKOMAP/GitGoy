@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
@@ -87,8 +90,45 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseCors();
 app.MapControllers();
-app.MapGet("/", () => Results.Redirect("/swagger"));
+
+if (app.Configuration.GetValue<bool>("WebUi:OpenBrowserOnStart"))
+{
+    app.Lifetime.ApplicationStarted.Register(() =>
+    {
+        var addresses = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()?.Addresses;
+        var address = addresses?.FirstOrDefault(item => item.StartsWith("http://", StringComparison.OrdinalIgnoreCase))
+            ?? addresses?.FirstOrDefault()
+            ?? "http://localhost:5221";
+        var url = NormalizeBrowserUrl(address);
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = url,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogWarning(ex, "Could not open web UI in a browser.");
+        }
+    });
+}
+
 app.Run();
+
+static string NormalizeBrowserUrl(string address)
+{
+    var url = address
+        .Replace("0.0.0.0", "localhost", StringComparison.OrdinalIgnoreCase)
+        .Replace("[::]", "localhost", StringComparison.OrdinalIgnoreCase)
+        .TrimEnd('/');
+
+    return $"{url}/";
+}

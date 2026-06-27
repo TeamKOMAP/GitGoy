@@ -210,11 +210,35 @@ public class GitService
     {
         var data = await LoadAsync(projectId);
         var files = FindBranch(data, branch).Files;
-        var prefix = string.IsNullOrWhiteSpace(path) ? string.Empty : path.TrimEnd('/') + "/";
+        var normalizedPath = NormalizeRepositoryPath(path);
+        var prefix = string.IsNullOrWhiteSpace(normalizedPath) ? string.Empty : normalizedPath + "/";
+        var entries = new Dictionary<string, FileEntryRes>(StringComparer.OrdinalIgnoreCase);
 
-        return files
-            .Where(file => file.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            .Select(file => new FileEntryRes(Path.GetFileName(file.Path), file.Path, false))
+        foreach (var file in files.Where(file => file.Path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+        {
+            var relativePath = file.Path[prefix.Length..];
+            if (string.IsNullOrWhiteSpace(relativePath))
+            {
+                continue;
+            }
+
+            var separatorIndex = relativePath.IndexOf('/');
+            if (separatorIndex >= 0)
+            {
+                var directoryName = relativePath[..separatorIndex];
+                var directoryPath = string.IsNullOrWhiteSpace(prefix)
+                    ? directoryName
+                    : $"{prefix}{directoryName}";
+                entries.TryAdd(directoryPath, new FileEntryRes(directoryName, directoryPath, true));
+                continue;
+            }
+
+            entries[file.Path] = new FileEntryRes(relativePath, file.Path, false);
+        }
+
+        return entries.Values
+            .OrderByDescending(entry => entry.IsDirectory)
+            .ThenBy(entry => entry.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
 
@@ -252,6 +276,13 @@ public class GitService
     {
         return data.Branches.FirstOrDefault(branch => branch.Name == branchName)
             ?? throw new InvalidOperationException($"Branch '{branchName}' not found");
+    }
+
+    private static string NormalizeRepositoryPath(string? path)
+    {
+        return string.IsNullOrWhiteSpace(path)
+            ? string.Empty
+            : path.Replace('\\', '/').Trim('/');
     }
 
     private sealed class RepositoryData
